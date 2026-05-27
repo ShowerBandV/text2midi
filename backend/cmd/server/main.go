@@ -27,6 +27,7 @@ import (
 	"github.com/yourname/text2midi/internal/midi"
 	"github.com/yourname/text2midi/internal/schema"
 	"github.com/yourname/text2midi/internal/store"
+	"github.com/yourname/text2midi/internal/style"
 )
 
 func main() {
@@ -68,8 +69,8 @@ type Server struct {
 // --- Types ---
 
 type InfoResponse struct {
-	Tiers    map[string]int                   `json:"tiers"`    // tier ->maxBars
-	Formats  map[string]string                `json:"formats"`  // style ->"BPM range"
+	Styles []string          `json:"styles"`  // all available style keys
+	Tiers  map[string]int    `json:"tiers"`   // tier -> maxBars
 }
 
 type GenerateRequest struct {
@@ -101,17 +102,19 @@ type ErrorResponse struct {
 // --- Handlers ---
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
+	styles := style.All()
+	keys := make([]string, 0, len(styles))
+	for k := range styles {
+		keys = append(keys, k)
 	}
-
 	resp := InfoResponse{
-		Styles: styles,
+		Styles: keys,
 		Tiers: map[string]int{
+			"free":  8,
+			"basic": 16,
+			"pro":   32,
 		},
-		Formats: make(map[string]string),
 	}
-		resp.Formats[string(st)] = fmt.Sprintf("%d-%d BPM", info.MinBPM, info.MaxBPM)
-	}
-
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -130,8 +133,20 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		req.Key = "C minor"
 	}
 
-	// Validate.
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+	// Validate bars against tier limits.
+	maxBars := 16
+	switch req.Tier {
+	case "free":
+		maxBars = 8
+	case "basic":
+		maxBars = 16
+	case "pro":
+		maxBars = 32
+	}
+	if req.Bars > maxBars {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error: fmt.Sprintf("tier %q allows max %d bars, got %d", req.Tier, maxBars, req.Bars),
+		})
 		return
 	}
 

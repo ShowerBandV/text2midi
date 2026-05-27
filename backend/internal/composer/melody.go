@@ -9,6 +9,8 @@ package composer
 
 import (
 	"fmt"
+	"math/rand"
+	"time"
 
 	"github.com/yourname/text2midi/internal/schema"
 )
@@ -80,7 +82,8 @@ func (g *MelodyGrammar) ApplyAll(events []schema.NoteEvent, totalBars int) []sch
 	return events
 }
 
-// 1. Scale Mask: force every note to be in-key.
+// 1. Scale Mask: only constrain STRONG BEAT notes. Weak beats can pass.
+// This preserves color tones while keeping the harmonic foundation solid.
 func (g *MelodyGrammar) applyScaleMask(events []schema.NoteEvent) []schema.NoteEvent {
 	corrected := 0
 	scaleSet := make(map[int]bool)
@@ -90,15 +93,22 @@ func (g *MelodyGrammar) applyScaleMask(events []schema.NoteEvent) []schema.NoteE
 
 	for i := range events {
 		if !scaleSet[events[i].Pitch] {
-			// Snap to nearest in-key pitch.
-			nearest := events[i].Pitch
-			for _, sp := range g.ScalePitches {
-				if abs(events[i].Pitch-sp) < abs(events[i].Pitch-nearest) {
-					nearest = sp
+			// Only correct strong beats (beats 0 and 2 within the bar).
+			beatInBar := events[i].StartBeat - float64(int(events[i].StartBeat/4)*4)
+			isStrongBeat := beatInBar < 0.5 || (beatInBar > 1.5 && beatInBar < 2.5)
+
+			if isStrongBeat {
+				// Strong beat: snap to nearest in-key pitch.
+				nearest := events[i].Pitch
+				for _, sp := range g.ScalePitches {
+					if abs(events[i].Pitch-sp) < abs(events[i].Pitch-nearest) {
+						nearest = sp
+					}
 				}
+				events[i].Pitch = nearest
+				corrected++
 			}
-			events[i].Pitch = nearest
-			corrected++
+			// Weak beat: leave as-is (preserves color tones, passing dissonance).
 		}
 	}
 	if corrected > 0 {
@@ -107,41 +117,40 @@ func (g *MelodyGrammar) applyScaleMask(events []schema.NoteEvent) []schema.NoteE
 	return events
 }
 
-// 2. Interval Limiter: fold large jumps, insert passing notes.
+// 2. Interval Limiter: keep large leaps but ensure reverse compensation.
+// Big leaps are MEMORABLE (Somewhere Over The Rainbow = octave leap).
+// After a leap, the next motion MUST go in the opposite direction.
 func (g *MelodyGrammar) applyIntervalLimiter(events []schema.NoteEvent) []schema.NoteEvent {
-	result := make([]schema.NoteEvent, 0, len(events)*2)
 	fixed := 0
 
-	for i := 0; i < len(events); i++ {
-		result = append(result, events[i])
+	for i := 1; i < len(events)-1; i++ {
+		prevInt := events[i].Pitch - events[i-1].Pitch
+		nextInt := events[i+1].Pitch - events[i].Pitch
+		absPrev := prevInt
+		if absPrev < 0 {
+			absPrev = -absPrev
+		}
 
-		if i+1 < len(events) {
-			interval := events[i+1].Pitch - events[i].Pitch
-			absInt := interval
-			if absInt < 0 {
-				absInt = -absInt
-			}
-
-			if absInt > g.MaxInterval {
-				// Insert a passing note halfway.
-				midPitch := (events[i].Pitch + events[i+1].Pitch) / 2
-				midBeat := (events[i].StartBeat + events[i+1].StartBeat) / 2
-				midDur := (events[i+1].StartBeat - events[i].StartBeat) * 0.5
-
-				result = append(result, schema.NoteEvent{
-					Type: "note", Pitch: midPitch,
-					StartBeat:    midBeat,
-					DurationBeat: midDur,
-					Velocity:     (events[i].Velocity + events[i+1].Velocity) / 2,
-				})
+		if absPrev > g.MaxInterval {
+			// Big leap happened. Check if next note goes the same direction.
+			sameDirection := (prevInt > 0 && nextInt > 0) || (prevInt < 0 && nextInt < 0)
+			if sameDirection {
+				// Reverse the next interval.
+				events[i+1].Pitch = events[i].Pitch - (prevInt / 3)
+				if events[i+1].Pitch < 21 {
+					events[i+1].Pitch += 12
+				}
+				if events[i+1].Pitch > 108 {
+					events[i+1].Pitch -= 12
+				}
 				fixed++
 			}
 		}
 	}
 	if fixed > 0 {
-		fmt.Printf("[IntervalLimiter] inserted %d passing notes (max interval=%d)\n", fixed, g.MaxInterval)
+		fmt.Printf("[IntervalLimiter] corrected %d leap compensations\n", fixed)
 	}
-	return result
+	return events
 }
 
 // 3. Gravity System: ensure each phrase returns to tonic or chord tone.
