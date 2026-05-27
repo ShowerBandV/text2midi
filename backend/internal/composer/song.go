@@ -328,9 +328,10 @@ func ComposeSong(motif []int, chords []string, totalBars, basePitch, bpm int,
 		OctaveStrategy: "chorus_up", BarsPerPhrase: 4, TotalBars: totalBars,
 	}
 	var allPhrases []Phrase
+	style := styleLabel(darkness, energy, rhythmic)
 	for _, sec := range timeline.Sections {
 		motifVar := ApplyMotif(motif, sec.MotifMode)
-		phrases := BuildSection(motifVar, sec.Name, sec.Bars, plan, rng)
+		phrases := BuildSection(motifVar, sec.Name, sec.Bars, plan, rng, style)
 		allPhrases = append(allPhrases, phrases...)
 	}
 	evMap["lead"] = ExpandMelody(allPhrases, basePitch, bpm, darkness, energy, rhythmic, tension)

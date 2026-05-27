@@ -4,10 +4,7 @@
 package composer
 
 import (
-	"fmt"
 	"math/rand"
-
-	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
 // ─── Motif Plan ────────────────────────────────────────────────────
@@ -133,112 +130,11 @@ func BuildPhrase(motif []int, plan MotifPlan, rng *rand.Rand) Phrase {
 // ─── Section Composer ──────────────────────────────────────────────
 
 // BuildSection generates phrases for a given section type.
-func BuildSection(motif []int, name string, bars int, plan MotifPlan, rng *rand.Rand) []Phrase {
-	numPhrases := bars / plan.BarsPerPhrase
-	if numPhrases < 1 {
-		numPhrases = 1
-	}
-
-	phrases := make([]Phrase, numPhrases)
-	for i := 0; i < numPhrases; i++ {
-
-		phrase := BuildPhrase(motif, plan, rng)
-
-		// Apply section-specific transformations.
-		switch name {
-		case "intro":
-			// Sparser, lower register.
-			for b := range phrase.Bars {
-				for j := range phrase.Bars[b] {
-					phrase.Bars[b][j] = phrase.Bars[b][j]/2 - 12 // lower + quieter
-				}
-				if len(phrase.Bars[b]) > 3 {
-					phrase.Bars[b] = phrase.Bars[b][:3] // fewer notes
-				}
-			}
-		case "verse":
-			// Keep mostly original.
-		case "chorus":
-			// Higher register, fuller.
-			for b := range phrase.Bars {
-				for j := range phrase.Bars[b] {
-					phrase.Bars[b][j] += 12 // octave up
-				}
-				// Double the motif (octave doubling).
-				if len(phrase.Bars[b]) > 0 {
-					doubled := make([]int, len(phrase.Bars[b])*2)
-					for j, n := range phrase.Bars[b] {
-						doubled[j] = n
-						doubled[len(phrase.Bars[b])+j] = n + 12
-					}
-					phrase.Bars[b] = doubled
-				}
-			}
-		case "bridge":
-			// Invert + rhythm shift.
-			for b := range phrase.Bars {
-				phrase.Bars[b] = Invert(phrase.Bars[b])
-			}
-		case "outro":
-			// Return to original, slow down.
-			for b := range phrase.Bars {
-				phrase.Bars[b] = copySlice(motif)
-			}
-		}
-
-		phrases[i] = phrase
-	}
-	return phrases
-}
-
-// ─── Expand to NoteEvents ──────────────────────────────────────────
-
-// ExpandMelody converts motif-based phrases into MIDI NoteEvents.
-// basePitch: the MIDI root pitch (e.g. 60 for C4).
-// bpm: used for timing calculations.
-// ExpandMelody moved to song.go (style-aware version)
-func GenerateMelodyFromMotif(motif []int, totalBars int, basePitch, bpm int) []schema.NoteEvent {
-	if len(motif) < 2 {
-		return nil
-	}
-
-	rng := rand.New(rand.NewSource(42))
-
-	plan := MotifPlan{
-		UseRate:         0.7,
-		VariationLevel:  0.4,
-		CallResponse:    true,
-		OctaveStrategy:  "chorus_up",
-		BarsPerPhrase:   4,
-		TotalBars:       totalBars,
-	}
-
-	// Build sections.
-	sections := map[string]int{
-		"intro":  2,
-		"verse":  4,
-		"chorus": 4,
-		"bridge": 2,
-		"outro":  2,
-	}
-
-	var allPhrases []Phrase
-	for name, bars := range sections {
-		if bars <= 0 {
-			continue
-		}
-		phrases := BuildSection(motif, name, bars, plan, rng)
-		allPhrases = append(allPhrases, phrases...)
-		fmt.Printf("[MotifEngine] %s: %d phrases\n", name, len(phrases))
-	}
-
-	events := ExpandMelody(allPhrases, basePitch, bpm, 0.5, 0.5, 0.5, 0.5)
-	fmt.Printf("[MotifEngine] total: %d notes from %d-note motif\n", len(events), len(motif))
-	return events
-}
+// BuildSection moved to phrase.go (style-aware)
 
 func copySlice(s []int) []int {
 	out := make([]int, len(s))
 	copy(out, s)
 	return out
 }
+
