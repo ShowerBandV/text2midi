@@ -286,7 +286,7 @@ func main() {
 
 	// --- MusicDNA extraction ---
 	extractor := musicdna.NewExtractor()
-	dna := extractor.Extract(evMap, plan.TotalBars, plan.Key.Root+" "+plan.Key.Mode, fmt.Sprintf("%d", plan.BPM))
+	dna := extractor.Extract(evMap, plan.TotalBars, plan.Key.Root+" "+plan.Key.Mode)
 	fmt.Println(dna.Print())
 
 	fmt.Printf("  MIDI written: %s\n", result.OutputPath)

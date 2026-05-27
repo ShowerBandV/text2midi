@@ -1,78 +1,91 @@
-// Package musicdna — structured music representation.
-// A song is not a MIDI file. It's a 5-layer DNA structure:
-// StructureDNA, HarmonyDNA, MotifDNA, RhythmDNA, TextureDNA.
+// Package musicdna — core music representation.
+// 3 layers only: Structure, Harmony, Motif.
+// Purpose: record "music generation rules", not MIDI data.
 package musicdna
 
-// MusicDNA is the complete representation of a song.
+import "fmt"
+
+// MusicDNA is the complete generative representation of a song.
 type MusicDNA struct {
 	Structure StructureDNA
 	Harmony   HarmonyDNA
 	Motif     MotifDNA
-	Rhythm    RhythmDNA
-	Texture   TextureDNA
 }
 
-// ─── 1. Structure Layer ────────────────────────────────────────────
+// Print returns a human-readable summary.
+func (d *MusicDNA) Print() string {
+	s := "===== MusicDNA =====\n"
+	s += d.Structure.Print()
+	s += d.Harmony.Print()
+	s += d.Motif.Print()
+	return s
+}
+
+// ─── Structure ─────────────────────────────────────────────────────
+
 type StructureDNA struct {
 	Sections []Section
 }
 
-type Section struct {
-	Name        string   // intro / verse / chorus / bridge / outro
-	StartBar    int
-	Bars        int
-	Energy      float64  // 0-1 average velocity+density
-	Density     float64  // 0-1 notes per bar
-	Instruments []string // active instrument track IDs
+func (s *StructureDNA) Print() string {
+	out := "--- Structure ---\n"
+	for _, sec := range s.Sections {
+		out += fmt.Sprintf("  %s: bars %d-%d (energy=%.2f, density=%.2f)\n",
+			sec.Name, sec.StartBar, sec.StartBar+sec.Bars-1, sec.Energy, sec.Density)
+	}
+	return out
 }
 
-// ─── 2. Harmony Layer ──────────────────────────────────────────────
+type Section struct {
+	Name      string
+	StartBar  int
+	Bars      int
+	Energy    float64
+	Density   float64
+}
+
+// ─── Harmony ───────────────────────────────────────────────────────
+
 type HarmonyDNA struct {
-	Key         string   // "C major", "A minor"
+	Key         string
 	Progression []ChordBar
 }
 
-type ChordBar struct {
-	Bar      int
-	Chord    string // "C", "Am", "F", "G7", "Dm7"
-	Function string // "T" (tonic), "S" (subdominant), "D" (dominant), "T_vi", etc.
+func (h *HarmonyDNA) Print() string {
+	out := "--- Harmony ---\n"
+	out += fmt.Sprintf("  Key: %s\n", h.Key)
+	for _, c := range h.Progression {
+		out += fmt.Sprintf("  bar %d: %s\n", c.Bar, c.Chord)
+	}
+	return out
 }
 
-// ─── 3. Motif Layer ────────────────────────────────────────────────
+type ChordBar struct {
+	Bar   int
+	Chord string
+}
+
+// ─── Motif ─────────────────────────────────────────────────────────
+
 type MotifDNA struct {
-	Notes    []int          // relative intervals from root: [0,2,4,3]
-	Rhythm   []float64      // relative durations
-	Variants []MotifVariant
+	Pattern     []int     // interval sequence from root, e.g. [0,2,4,3]
+	Rhythm      []float64 // relative durations
+	Confidence  float64   // 0-1 how well this represents the song
+	Variants    []MotifVariant
 }
 
 type MotifVariant struct {
-	Type  string // "invert", "transpose", "rhythm_shift", "retrograde"
-	Notes []int
+	Type    string // "transpose", "invert", "fragment", "rhythm_shift"
+	Pattern []int
 }
 
-// ─── 4. Rhythm Layer ────────────────────────────────────────────────
-type RhythmDNA struct {
-	DrumPattern      string             // "trap", "boom_bap", "rock", "pop"
-	Swing            float64            // 0-1
-	DensityBySection map[string]float64 // section name → density
-}
-
-// ─── 5. Texture Layer ──────────────────────────────────────────────
-type TextureDNA struct {
-	InstrumentTimeline map[string][]int   // instrument track ID → active bars
-	Layering           []LayerEvent
-}
-
-type LayerEvent struct {
-	Bar        int
-	Action     string // "add", "remove", "thin", "thicken"
-	Instrument string
-}
-
-// ─── 6. MusicDNA Library ──────────────────────────────────────────
-// Template is a named, reusable MusicDNA for a specific style/archetype.
-type Template struct {
-	Name        string
-	Description string
-	DNA         MusicDNA
+func (m *MotifDNA) Print() string {
+	out := "--- Motif ---\n"
+	out += fmt.Sprintf("  Pattern (intervals): %v\n", m.Pattern)
+	out += fmt.Sprintf("  Rhythm: %v\n", m.Rhythm)
+	out += fmt.Sprintf("  Confidence: %.2f\n", m.Confidence)
+	for _, v := range m.Variants {
+		out += fmt.Sprintf("  Variant %s: %v\n", v.Type, v.Pattern)
+	}
+	return out
 }

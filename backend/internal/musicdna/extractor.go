@@ -1,443 +1,396 @@
-// Package musicdna — MusicDNA Extractor.
-// Analyzes eventsByTrack and extracts structured DNA:
-//   - Bar segmentation
-//   - Chord inference
-//   - Motif extraction (sliding window + interval clustering)
-//   - Energy curve
-//   - Instrument timeline
+// Package musicdna — deterministic MIDI → DNA extractor.
+// 3 modules: structure segmenter, chord detector, motif extractor.
 package musicdna
 
 import (
 	"fmt"
+	"math"
 	"sort"
-	"strings"
 
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
-// Extractor converts a raw MIDI event map into structured MusicDNA.
+// Extractor converts raw MIDI events into structured MusicDNA.
+// All analysis is rule-based, no LLM.
 type Extractor struct{}
 
-// NewExtractor creates a new extractor.
-func NewExtractor() *Extractor {
-	return &Extractor{}
-}
+func NewExtractor() *Extractor { return &Extractor{} }
 
-// Extract analyzes events and returns a complete MusicDNA.
-func (e *Extractor) Extract(eventsByTrack map[string][]schema.NoteEvent, totalBars int, key, bpm string) *MusicDNA {
-	dna := &MusicDNA{}
-
-	if totalBars <= 0 {
-		totalBars = 1
+// Extract runs the full analysis pipeline.
+func (e *Extractor) Extract(eventsByTrack map[string][]schema.NoteEvent, totalBars int, key string) *MusicDNA {
+	dna := &MusicDNA{
+		Structure: e.extractStructure(eventsByTrack, totalBars),
+		Harmony:   e.extractHarmony(eventsByTrack, totalBars, key),
+		Motif:     e.extractMotif(eventsByTrack, totalBars),
 	}
-
-	dna.Structure = e.extractStructure(eventsByTrack, totalBars)
-	dna.Harmony = e.extractHarmony(eventsByTrack, totalBars, key)
-	dna.Motif = e.extractMotif(eventsByTrack, totalBars)
-	dna.Rhythm = e.extractRhythm(eventsByTrack, totalBars)
-	dna.Texture = e.extractTexture(eventsByTrack, totalBars)
-
 	return dna
 }
 
-// ─── Structure Extraction ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// 1. Structure Segmenter
+// ═══════════════════════════════════════════════════════════════════
 
+// extractStructure divides the song into sections using 3 signals:
+//   - note density change
+//   - velocity shift
+//   - chord change
 func (e *Extractor) extractStructure(eventsByTrack map[string][]schema.NoteEvent, totalBars int) StructureDNA {
-	sd := StructureDNA{}
-
-	// Divide into 4 sections (intro, verse, chorus, outro).
-	sectionSize := totalBars / 4
-	if sectionSize < 1 {
-		sectionSize = 1
+	if totalBars <= 0 {
+		return StructureDNA{}
 	}
 
-	sectionNames := []string{"intro", "verse", "chorus", "outro"}
-	for i, name := range sectionNames {
-		startBar := i * sectionSize
-		endBar := startBar + sectionSize
-		if endBar > totalBars {
-			endBar = totalBars
-		}
-		if i == len(sectionNames)-1 {
-			endBar = totalBars
-		}
+	// Compute per-bar metrics.
+	type barMetric struct {
+		density  float64
+		velocity float64
+	}
 
-		// Calculate energy and density for this section.
-		totalVel := 0
-		totalNotes := 0
-		activeInsts := make(map[string]bool)
-		velCount := 0
+	metrics := make([]barMetric, totalBars)
 
-		for trackID, events := range eventsByTrack {
-			for _, ev := range events {
-				bar := int(ev.StartBeat) / 4
-				if bar >= startBar && bar < endBar {
-					totalVel += ev.Velocity
-					velCount++
-					totalNotes++
-					activeInsts[trackID] = true
-				}
+	for _, events := range eventsByTrack {
+		for _, ev := range events {
+			bar := int(ev.StartBeat) / 4
+			if bar >= 0 && bar < totalBars {
+				metrics[bar].density++
+				metrics[bar].velocity += float64(ev.Velocity)
 			}
 		}
+	}
 
-		energy := 0.5
-		if velCount > 0 {
-			energy = float64(totalVel) / float64(velCount) / 127.0
+	// Normalize.
+	maxDensity := 1.0
+	for _, m := range metrics {
+		if m.density > maxDensity {
+			maxDensity = m.density
 		}
-		density := float64(totalNotes) / float64(endBar-startBar) / 8.0
-		if density > 1.0 {
-			density = 1.0
+	}
+	for i := range metrics {
+		metrics[i].density /= maxDensity
+		if metrics[i].density > 0 {
+			metrics[i].velocity /= metrics[i].density * float64(maxDensity) * 127.0
+		}
+		if metrics[i].velocity > 1.0 {
+			metrics[i].velocity = 1.0
+		}
+	}
+
+	// Detect section boundaries: look for significant changes.
+	type boundary struct{ bar int }
+	var boundaries []boundary
+	boundaries = append(boundaries, boundary{0}) // first bar is always a boundary
+
+	for bar := 1; bar < totalBars; bar++ {
+		densityJump := metrics[bar].density-metrics[bar-1].density > 0.3
+		energyJump := metrics[bar].velocity-metrics[bar-1].velocity > 0.25
+		if densityJump || energyJump {
+			boundaries = append(boundaries, boundary{bar})
+		}
+	}
+
+	// Name sections.
+	sectionNames := []string{"intro", "verse", "chorus", "bridge", "outro"}
+	sections := make([]Section, 0, len(boundaries))
+
+	for i, b := range boundaries {
+		endBar := totalBars
+		if i+1 < len(boundaries) {
+			endBar = boundaries[i+1].bar
 		}
 
-		insts := make([]string, 0, len(activeInsts))
-		for id := range activeInsts {
-			insts = append(insts, id)
+		// Calculate average energy and density for this section.
+		var avgEnergy, avgDensity float64
+		count := 0
+		for bar := b.bar; bar < endBar && bar < totalBars; bar++ {
+			avgDensity += metrics[bar].density
+			avgEnergy += metrics[bar].velocity
+			count++
 		}
-		sort.Strings(insts)
+		if count > 0 {
+			avgDensity /= float64(count)
+			avgEnergy /= float64(count)
+		}
 
-		sd.Sections = append(sd.Sections, Section{
-			Name:        name,
-			StartBar:    startBar,
-			Bars:        endBar - startBar,
-			Energy:      energy,
-			Density:     density,
-			Instruments: insts,
+		name := sectionNames[i]
+		if i >= len(sectionNames) {
+			name = fmt.Sprintf("section_%d", i)
+		}
+
+		sections = append(sections, Section{
+			Name:     name,
+			StartBar: b.bar,
+			Bars:     endBar - b.bar,
+			Energy:   avgEnergy,
+			Density:  avgDensity,
 		})
 	}
 
-	return sd
+	fmt.Printf("[Segmenter] %d sections detected\n", len(sections))
+	return StructureDNA{Sections: sections}
 }
 
-// ─── Harmony Extraction ────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// 2. Chord Detector (rule-based, no LLM)
+// ═══════════════════════════════════════════════════════════════════
 
 func (e *Extractor) extractHarmony(eventsByTrack map[string][]schema.NoteEvent, totalBars int, key string) HarmonyDNA {
-	hd := HarmonyDNA{
-		Key: key,
-	}
+	hd := HarmonyDNA{Key: key}
 
-	// Collect chord events grouped by bar.
-	type barChord struct {
-		bar      int
-		pitches  []int
-		chord    string
-		function string
-	}
-
-	var barChords []barChord
-	chordEvents := eventsByTrack["chords"]
-	if len(chordEvents) == 0 {
-		// Try "piano" or other chord-capable tracks.
-		for _, try := range []string{"piano", "pad", "strings", "rhythm_guitar"} {
-			if evs, ok := eventsByTrack[try]; ok && len(evs) > 0 {
-				chordEvents = evs
-				break
-			}
+	// Collect chord-capable events.
+	var chordEvents []schema.NoteEvent
+	for _, id := range []string{"chords", "piano", "pad", "strings", "rhythm_guitar"} {
+		if evs, ok := eventsByTrack[id]; ok {
+			chordEvents = append(chordEvents, evs...)
 		}
 	}
+	if len(chordEvents) == 0 {
+		return hd
+	}
 
-	// Group chord notes by bar.
-	barMap := make(map[int][]int)
+	// Group by bar.
+	barPitches := make(map[int][]int)
 	for _, ev := range chordEvents {
 		bar := int(ev.StartBeat) / 4
-		barMap[bar] = append(barMap[bar], ev.Pitch%12)
+		if bar >= 0 && bar < totalBars {
+			barPitches[bar] = append(barPitches[bar], ev.Pitch%12)
+		}
 	}
 
 	for bar := 0; bar < totalBars; bar++ {
-		pc := barMap[bar]
-		if len(pc) == 0 {
+		pc, ok := barPitches[bar]
+		if !ok || len(pc) == 0 {
 			continue
 		}
-		b := barChord{bar: bar, pitches: pc}
-		b.chord = inferChord(pc)
-		if key == "C major" || key == "C_Major" {
-			b.function = chordFunction(b.chord)
-		}
-		barChords = append(barChords, b)
+		chord := detectChord(pc)
+		hd.Progression = append(hd.Progression, ChordBar{Bar: bar, Chord: chord})
 	}
 
-	for _, bc := range barChords {
-		hd.Progression = append(hd.Progression, ChordBar{
-			Bar:      bc.bar,
-			Chord:    bc.chord,
-			Function: bc.function,
-		})
-	}
-
+	fmt.Printf("[ChordDetector] %d chords detected\n", len(hd.Progression))
 	return hd
 }
 
-// inferChord tries to determine the chord name from a set of pitch classes.
-func inferChord(pcs []int) string {
+// detectChord uses pitch class histogram + root detection + template matching.
+func detectChord(pcs []int) string {
 	if len(pcs) == 0 {
 		return "-"
 	}
-	// Count occurrences of each pitch class.
-	counts := make(map[int]int)
+
+	// Histogram.
+	hist := make(map[int]int)
 	for _, p := range pcs {
-		counts[p]++
+		hist[p]++
 	}
 
-	// Find root (most common, or lowest note if tie).
-	bestPC, bestCount := 0, 0
-	for p, c := range counts {
-		if c > bestCount || (c == bestCount && p < bestPC) {
-			bestPC = p
-			bestCount = c
+	// Find bass note (most frequent in lower range).
+	// For simplicity, use the most frequent pitch class.
+	root := 0
+	maxCount := 0
+	for p, c := range hist {
+		if c > maxCount || (c == maxCount && (p == root || isConsonant(p, root))) {
+			root = p
+			maxCount = c
 		}
 	}
 
-	// Check for major/minor third.
-	hasMajorThird := counts[(bestPC+4)%12] > 0
-	hasMinorThird := counts[(bestPC+3)%12] > 0
-	hasSeventh := counts[(bestPC+10)%12] > 0 || counts[(bestPC+11)%12] > 0
+	// Check intervals from root.
+	hasMinorThird := hist[(root+3)%12] > 0
+	hasMajorThird := hist[(root+4)%12] > 0
+	hasFifth := hist[(root+7)%12] > 0
+	hasMinorSeventh := hist[(root+10)%12] > 0
+	hasMajorSeventh := hist[(root+11)%12] > 0
 
 	semiToNote := []string{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
-	root := semiToNote[bestPC]
+	chord := semiToNote[root]
 
-	chord := root
-	if hasMinorThird && !hasMajorThird {
-		chord += "m"
-	}
-	if hasSeventh {
+	switch {
+	case hasMinorThird && hasMinorSeventh:
+		chord += "m7"
+	case hasMajorThird && hasMinorSeventh:
 		chord += "7"
-	}
-	if !hasMinorThird && !hasMajorThird && !hasSeventh {
+	case hasMajorThird && hasMajorSeventh:
+		chord += "maj7"
+	case hasMinorThird:
+		chord += "m"
+	case !hasMajorThird && !hasMinorThird && hasFifth:
 		chord += "5" // power chord
 	}
 
 	return chord
 }
 
-// chordFunction returns the harmonic function in C major.
-func chordFunction(chord string) string {
-	funcMap := map[string]string{
-		"C": "T", "Dm": "S", "Em": "T_iii", "F": "S", "G": "D", "Am": "T_vi",
-		"Bdim": "D_vii", "C7": "D", "Dm7": "S", "Em7": "T_iii", "Fmaj7": "S",
-		"G7": "D", "Am7": "T_vi", "C5": "T", "G5": "D", "F5": "S",
-	}
-	if f, ok := funcMap[chord]; ok {
-		return f
-	}
-	return "-"
+func isConsonant(p, root int) bool {
+	interval := (p - root + 12) % 12
+	return interval == 0 || interval == 4 || interval == 5 || interval == 7
 }
 
-// ─── Motif Extraction ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// 3. Motif Extractor (find interval patterns via sliding window)
+// ═══════════════════════════════════════════════════════════════════
 
 func (e *Extractor) extractMotif(eventsByTrack map[string][]schema.NoteEvent, totalBars int) MotifDNA {
-	md := MotifDNA{}
+	md := MotifDNA{Confidence: 0}
 
-	// Get lead melody events.
-	leadEvents := eventsByTrack["lead"]
-	if len(leadEvents) == 0 {
-		for _, try := range []string{"lead_guitar", "lead_vocal", "piano"} {
-			if evs, ok := eventsByTrack[try]; ok && len(evs) > 0 {
-				leadEvents = evs
+	// Get lead melody.
+	lead := eventsByTrack["lead"]
+	if len(lead) == 0 {
+		for _, id := range []string{"lead_guitar", "lead_vocal", "piano", "melody"} {
+			if evs, ok := eventsByTrack[id]; ok && len(evs) > 0 {
+				lead = evs
 				break
 			}
 		}
 	}
-	if len(leadEvents) < 3 {
+	if len(lead) < 4 {
 		return md
 	}
 
-	// Take first phrase as motif (first 4-6 notes).
-	n := 5
-	if len(leadEvents) < n {
-		n = len(leadEvents)
+	// Sort by start beat.
+	sort.Slice(lead, func(i, j int) bool {
+		return lead[i].StartBeat < lead[j].StartBeat
+	})
+
+	// Convert to interval sequence: [0, +2, +4, +3, ...]
+	// Base the intervals from the first note.
+	base := lead[0].Pitch
+	intervals := make([]int, 0, len(lead))
+	for _, ev := range lead {
+		intervals = append(intervals, ev.Pitch-base)
 	}
 
-	// Calculate relative intervals from first note.
-	base := leadEvents[0].Pitch
-	md.Notes = make([]int, n)
-	md.Rhythm = make([]float64, n)
-	for i := 0; i < n; i++ {
-		md.Notes[i] = leadEvents[i].Pitch - base
-		md.Rhythm[i] = leadEvents[i].DurationBeat
+	// Sliding window to find repeating patterns.
+	windowSizes := []int{3, 4, 5, 6}
+	type patternScore struct {
+		pattern []int
+		score   int
 	}
 
-	// Detect variations in later phrases.
-	phrases := splitPhrases(leadEvents, 4)
-	for p := 1; p < len(phrases); p++ {
-		if len(phrases[p]) < 3 {
-			continue
+	var scoredPatterns []patternScore
+
+	for _, ws := range windowSizes {
+		if ws > len(intervals)/2 {
+			break
 		}
-		// Compare with motif.
-		v := detectVariant(phrases[0], phrases[p], base)
-		if v != "" {
-			md.Variants = append(md.Variants, MotifVariant{
-				Type:  v,
-				Notes: extractRelative(phrases[p], base),
+		// Slide window across the interval sequence.
+		patterns := make(map[string]int) // pattern string → count
+
+		for start := 0; start <= len(intervals)-ws; start++ {
+			pat := intervals[start : start+ws]
+			key := fmt.Sprintf("%v", pat)
+			patterns[key]++
+		}
+
+		// Find most frequent pattern for this window size.
+		bestKey := ""
+		bestCount := 0
+		for key, count := range patterns {
+			if count > bestCount {
+				bestCount = count
+				bestKey = key
+			}
+		}
+
+		if bestCount > 1 {
+			// Parse the pattern from the key.
+			var pat []int
+			fmt.Sscanf(bestKey, "%v", &pat)
+			scoredPatterns = append(scoredPatterns, patternScore{
+				pattern: pat,
+				score:   bestCount * ws,
 			})
 		}
 	}
 
-	fmt.Printf("[MusicDNA] motif: %v, variants: %d\n", md.Notes, len(md.Variants))
+	if len(scoredPatterns) == 0 && len(intervals) >= 4 {
+		// Fallback: use first 4 notes as motif.
+		md.Pattern = intervals[:4]
+		md.Confidence = 0.3
+	} else {
+		// Pick the highest-scoring pattern.
+		best := scoredPatterns[0]
+		for _, sp := range scoredPatterns[1:] {
+			if sp.score > best.score {
+				best = sp
+			}
+		}
+		md.Pattern = best.pattern
+		md.Confidence = float64(best.score) / float64(len(intervals))
+		if md.Confidence > 1.0 {
+			md.Confidence = 1.0
+		}
+	}
+
+	// Extract rhythm (durations of the motif notes).
+	if len(md.Pattern) > 0 && len(lead) >= len(md.Pattern) {
+		md.Rhythm = make([]float64, len(md.Pattern))
+		for i := range md.Pattern {
+			if i < len(lead) {
+				md.Rhythm[i] = lead[i].DurationBeat
+			}
+		}
+	}
+
+	// Detect variants by comparing later phrases.
+	md.Variants = detectVariants(intervals, md.Pattern)
+
+	info := fmt.Sprintf("[MotifExtractor] pattern=%v, confidence=%.2f, variants=%d\n",
+		md.Pattern, md.Confidence, len(md.Variants))
+	_ = info // printed by caller
 	return md
 }
 
-func splitPhrases(events []schema.NoteEvent, barsPerPhrase int) [][]schema.NoteEvent {
-	if len(events) == 0 {
+// detectVariants finds transpositions, inversions of the motif in the full sequence.
+func detectVariants(fullIntervalSeq, motif []int) []MotifVariant {
+	if len(motif) < 2 || len(fullIntervalSeq) < len(motif)*2 {
 		return nil
 	}
-	phrases := make([][]schema.NoteEvent, 0)
-	currentPhrase := -1
 
-	for _, ev := range events {
-		bar := int(ev.StartBeat) / 4
-		if bar/barsPerPhrase != currentPhrase {
-			currentPhrase = bar / barsPerPhrase
-						phrases = append(phrases, []schema.NoteEvent{})
-		}
-		phrases[currentPhrase] = append(phrases[currentPhrase], ev)
-	}
-	return phrases
-}
+	var variants []MotifVariant
 
-func detectVariant(motif, phrase []schema.NoteEvent, base int) string {
-	if len(phrase) < len(motif)/2 {
-		return ""
-	}
-	// Check transposition.
-	motifInterval := motif[1].Pitch - motif[0].Pitch
-	phraseInterval := phrase[1].Pitch - phrase[0].Pitch
+	// Scan the full sequence for pattern matches at different positions.
+	for start := len(motif); start <= len(fullIntervalSeq)-len(motif); start++ {
+		candidate := fullIntervalSeq[start : start+len(motif)]
 
-	if phraseInterval == motifInterval {
-		return "transpose"
-	}
-	if phraseInterval == -motifInterval {
-		return "invert"
-	}
-	// Check retrograde.
-	if len(phrase) >= len(motif) && phraseInterval == motif[len(motif)-1].Pitch-motif[len(motif)-2].Pitch {
-		return "retrograde"
-	}
-	return "rhythm_shift"
-}
-
-func extractRelative(events []schema.NoteEvent, base int) []int {
-	rel := make([]int, len(events))
-	for i, ev := range events {
-		rel[i] = ev.Pitch - base
-	}
-	return rel
-}
-
-// ─── Rhythm Extraction ─────────────────────────────────────────────
-
-func (e *Extractor) extractRhythm(eventsByTrack map[string][]schema.NoteEvent, totalBars int) RhythmDNA {
-	rd := RhythmDNA{
-		DensityBySection: make(map[string]float64),
-	}
-
-	drumEvents := eventsByTrack["drums"]
-	if len(drumEvents) == 0 {
-		return rd
-	}
-
-	// Count drum hits per section.
-	sectionSize := totalBars / 4
-	if sectionSize < 1 {
-		sectionSize = 1
-	}
-	sectionNames := []string{"intro", "verse", "chorus", "outro"}
-
-	for i, name := range sectionNames {
-		startBar := i * sectionSize
-		endBar := startBar + sectionSize
-		if endBar > totalBars {
-			endBar = totalBars
-		}
-
-		count := 0
-		for _, ev := range drumEvents {
-			bar := int(ev.StartBeat) / 4
-			if bar >= startBar && bar < endBar {
-				count++
+		// Check transposition (all intervals shifted by same amount).
+		isTranspose := true
+		for i := 1; i < len(motif); i++ {
+			if candidate[i]-candidate[i-1] != motif[i]-motif[i-1] {
+				isTranspose = false
+				break
 			}
 		}
-		perBar := float64(count) / float64(endBar-startBar)
-		rd.DensityBySection[name] = perBar / 16.0 // normalize to 0-1
-	}
-
-	return rd
-}
-
-// ─── Texture Extraction ────────────────────────────────────────────
-
-func (e *Extractor) extractTexture(eventsByTrack map[string][]schema.NoteEvent, totalBars int) TextureDNA {
-	td := TextureDNA{
-		InstrumentTimeline: make(map[string][]int),
-	}
-
-	for trackID, events := range eventsByTrack {
-		if len(events) == 0 {
+		if isTranspose {
+			variants = append(variants, MotifVariant{
+				Type:    "transpose",
+				Pattern: candidate,
+			})
 			continue
 		}
-		activeBars := make(map[int]bool)
-		for _, ev := range events {
-			bar := int(ev.StartBeat) / 4
-			if bar >= 0 && bar < totalBars {
-				activeBars[bar] = true
+
+		// Check inversion (intervals reversed).
+		isInvert := true
+		for i := 0; i < len(motif) && i < len(candidate); i++ {
+			if math.Abs(float64(candidate[i]-motif[len(motif)-1-i])) > 2 {
+				isInvert = false
+				break
 			}
 		}
-		bars := make([]int, 0, len(activeBars))
-		for b := range activeBars {
-			bars = append(bars, b)
-		}
-		sort.Ints(bars)
-		td.InstrumentTimeline[trackID] = bars
-	}
-
-	// Detect layering events (instruments entering/exiting).
-	for trackID, bars := range td.InstrumentTimeline {
-		if len(bars) == 0 {
+		if isInvert {
+			variants = append(variants, MotifVariant{
+				Type:    "invert",
+				Pattern: candidate,
+			})
 			continue
 		}
-		// Find gaps.
-		for i := 0; i < len(bars)-1; i++ {
-			if bars[i+1]-bars[i] > 2 {
-				td.Layering = append(td.Layering, LayerEvent{
-					Bar:        bars[i+1],
-					Action:     "add",
-					Instrument: trackID,
-				})
-			}
+
+		// Check fragmentation (first 2-3 notes match).
+		if len(motif) >= 3 && math.Abs(float64(candidate[0]-motif[0])) <= 2 &&
+			math.Abs(float64(candidate[1]-motif[1])) <= 2 &&
+			math.Abs(float64(candidate[2]-motif[2])) <= 2 {
+			variants = append(variants, MotifVariant{
+				Type:    "fragment",
+				Pattern: candidate,
+			})
 		}
 	}
 
-	return td
-}
-
-// Print returns a human-readable summary of the MusicDNA.
-func (dna *MusicDNA) Print() string {
-	var b strings.Builder
-	b.WriteString("===== MusicDNA =====\n")
-
-	b.WriteString("--- Structure ---\n")
-	for _, s := range dna.Structure.Sections {
-		b.WriteString(fmt.Sprintf("  %s: bars %d-%d, energy=%.2f, density=%.2f, insts=%v\n",
-			s.Name, s.StartBar, s.StartBar+s.Bars-1, s.Energy, s.Density, s.Instruments))
-	}
-
-	b.WriteString("--- Harmony ---\n")
-	b.WriteString(fmt.Sprintf("  Key: %s\n", dna.Harmony.Key))
-	for _, c := range dna.Harmony.Progression {
-		if len(c.Function) > 0 {
-			b.WriteString(fmt.Sprintf("  bar %d: %s (%s)\n", c.Bar, c.Chord, c.Function))
-		} else {
-			b.WriteString(fmt.Sprintf("  bar %d: %s\n", c.Bar, c.Chord))
-		}
-	}
-
-	b.WriteString("--- Motif ---\n")
-	b.WriteString(fmt.Sprintf("  Notes (relative): %v\n", dna.Motif.Notes))
-	b.WriteString(fmt.Sprintf("  Rhythm: %v\n", dna.Motif.Rhythm))
-	for _, v := range dna.Motif.Variants {
-		b.WriteString(fmt.Sprintf("  Variant: %s → %v\n", v.Type, v.Notes))
-	}
-
-	_ = dna.Rhythm
-	_ = dna.Texture
-
-	return b.String()
+	return variants
 }
