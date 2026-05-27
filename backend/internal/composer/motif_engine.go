@@ -196,50 +196,7 @@ func BuildSection(motif []int, name string, bars int, plan MotifPlan, rng *rand.
 // ExpandMelody converts motif-based phrases into MIDI NoteEvents.
 // basePitch: the MIDI root pitch (e.g. 60 for C4).
 // bpm: used for timing calculations.
-func ExpandMelody(phrases []Phrase, basePitch, bpm int) []schema.NoteEvent {
-	var events []schema.NoteEvent
-	bar := 0
-
-	for _, phrase := range phrases {
-		for bi, notes := range phrase.Bars {
-			if len(notes) == 0 {
-				bar++
-				continue
-			}
-
-			beatStart := float64(bar) * 4.0
-			// Distribute notes across the bar.
-			notesPerBar := len(notes)
-			step := 4.0 / float64(notesPerBar)
-
-			for i, rel := range notes {
-				pitch := basePitch + rel
-				if pitch < 21 {
-					pitch = 21
-				}
-				if pitch > 108 {
-					pitch = 108
-				}
-
-				events = append(events, schema.NoteEvent{
-					Type:         "note",
-					Pitch:        pitch,
-					StartBeat:    beatStart + float64(i)*step,
-					DurationBeat: step * 0.8,
-					Velocity:     70 + 10*(bi%3), // dynamic: increase through phrase
-				})
-			}
-			bar++
-		}
-	}
-
-	return events
-}
-
-// ─── Full Pipeline ─────────────────────────────────────────────────
-
-// GenerateMelodyFromMotif runs the full Motif Engine pipeline.
-// Takes a motif and a plan, returns a full melody as NoteEvents.
+// ExpandMelody moved to song.go (style-aware version)
 func GenerateMelodyFromMotif(motif []int, totalBars int, basePitch, bpm int) []schema.NoteEvent {
 	if len(motif) < 2 {
 		return nil
@@ -275,7 +232,7 @@ func GenerateMelodyFromMotif(motif []int, totalBars int, basePitch, bpm int) []s
 		fmt.Printf("[MotifEngine] %s: %d phrases\n", name, len(phrases))
 	}
 
-	events := ExpandMelody(allPhrases, basePitch, bpm)
+	events := ExpandMelody(allPhrases, basePitch, bpm, 0.5, 0.5, 0.5, 0.5)
 	fmt.Printf("[MotifEngine] total: %d notes from %d-note motif\n", len(events), len(motif))
 	return events
 }
