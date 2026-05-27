@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+		"math/rand"
 	"flag"
 	"fmt"
 	"os"
@@ -10,9 +10,7 @@ import (
 	"github.com/ShowerBandV/text2midi/internal/agent"
 	"github.com/ShowerBandV/text2midi/internal/composer"
 	"github.com/ShowerBandV/text2midi/internal/musicdna"
-	"github.com/ShowerBandV/text2midi/internal/generator"
-	"github.com/ShowerBandV/text2midi/internal/mutation"
-	"github.com/ShowerBandV/text2midi/internal/llm"
+			"github.com/ShowerBandV/text2midi/internal/llm"
 	"github.com/ShowerBandV/text2midi/internal/midi"
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
@@ -82,7 +80,6 @@ func main() {
 	composerDNA := composer.PickComposer(*styleName, *prompt, mood)
 	fmt.Printf("  Composer: %s", composerDNA.Name)
 	// --- SongMemory: track motif and section info ---
-	songMem := composer.NewSongMemory()
 
 
 	// Enable/disable post-processing based on DNA.
@@ -99,115 +96,47 @@ func main() {
 		os.Exit(1)
 	}
 
-	sd := fmt.Sprintf("%s beat, %d BPM", *styleName, *bpm)
-	evMap, _, _, err := agent.GeneratePatterns(client, *prompt, *styleName, sd,
-		plan.Key.Root+" "+plan.Key.Mode, plan.BPM, plan.TotalBars, plan.FeatureVector)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Patterns: %v\n", err)
-		os.Exit(1)
+	evMap := make(map[string][]schema.NoteEvent)
+	// --- SongComposer: emotion-driven full composition ---
+	emotion := composer.DetectEmotionFromLLM(mood)
+	curve := composer.BuildEmotionCurve(composer.DefaultEmotions(),
+		map[string]int{"intro":2,"verse":4,"chorus":4,"bridge":2,"outro":2},
+		[]string{"intro","verse","chorus","bridge","outro"}, plan.TotalBars)
+	_, _ = emotion, curve
+
+	// Extract motif from lead melody for SongComposer.
+	// Use the song planner's chord progression.
+	chordStrs := make([]string, len(plan.ChordProgression))
+	for i, cp := range plan.ChordProgression {
+		chordStrs[i] = cp.Chord
+	}
+	if len(chordStrs) == 0 {
+		chordStrs = []string{"C", "G", "Am", "F"}
 	}
 
-	totalBeats := plan.TotalBars * 4
-	cpJSON := agent.ChordProgressionToJSON(plan.ChordProgression)
-	desc := fmt.Sprintf(`{"style":"%s"}`, *styleName)
-	fvBytes, _ := json.Marshal(plan.FeatureVector)
-
-	ln, err := agent.GenerateMelodyNotes(client, "lead", plan.Key.Root, plan.Key.Scale,
-		desc, string(fvBytes), cpJSON, plan.BPM, totalBeats)
-	if err == nil && len(ln) > 0 {
-		// Style-aware: metal=minimal processing, pop=full processing
-		isMetal := plan.FeatureVector.Darkness >= 0.7 && plan.FeatureVector.Energy > 0.8
-		isHighEnergy := isMetal || (plan.FeatureVector.Energy > 0.7 && plan.FeatureVector.RhythmicComplexity < 0.5 && plan.FeatureVector.Darkness > 0.3)
-
-		// Apply MelodyGrammar: scale mask, interval limiter, gravity, phrasing.
-		grammar := composer.NewMelodyGrammar(plan.Key.Root, plan.Key.Mode)
-		ln = grammar.ApplyAll(ln, plan.TotalBars)
-
-		if isHighEnergy {
-			// Metal: lead guitar = intro riff (bars 0-1) + solo (last 2 bars).
-			// Remove lead notes outside those sections.
-			introEnd := 2 * 4.0    // first 2 bars
-			soloStart := float64(plan.TotalBars-2) * 4.0
-			var filtered []schema.NoteEvent
-			for _, n := range ln {
-				if n.StartBeat < introEnd || n.StartBeat >= soloStart {
-					filtered = append(filtered, n)
-				}
-			}
-			ln = filtered
-			// Lengthen notes for sustain.
-			for i := range ln {
-				if ln[i].DurationBeat < 0.5 {
-					ln[i].DurationBeat = 0.5
-				}
-			}
-			fmt.Printf("  Lead: intro+solo only (%d notes)\n", len(ln))
-		} else {
-			ln = composer.NewMotifExtractor().ApplyMotifDevelopment(ln, plan.TotalBars)
-			ln = composer.ApplyRegisterExpansion(ln, plan.TotalBars)
-			ln = composer.ApplySyncopation(ln)
-			ln = composer.ApplyCallResponse(ln)
-			ln = composer.ApplyAnacrusis(ln, plan.TotalBars)
-		}
-		gs := composer.DefaultGroove(plan.FeatureVector.Energy, "mpc58")
-		ln = composer.ApplyGroove(ln, gs)
-		evMap["lead"] = ln
-		fmt.Printf("  Lead: %d notes (metal=%v)", len(ln), isMetal)
-	songMem.LearnMotif(ln)
+	basePitch := 60
+	if plan.Key.Root == "C" || plan.Key.Root == "A" {
+		basePitch = 60
+	} else if plan.Key.Root == "D" || plan.Key.Root == "G" {
+		basePitch = 62
+	} else if plan.Key.Root == "E" || plan.Key.Root == "B" {
+		basePitch = 64
+	} else if plan.Key.Root == "F" {
+		basePitch = 65
 	}
 
-	if lead, ok := evMap["lead"]; ok && len(lead) > 0 {
-		bn, err := agent.GenerateBassFromMelody(client, lead, plan.Key.Root, plan.Key.Scale,
-			desc, string(fvBytes), cpJSON, plan.BPM, totalBeats)
-		if err == nil && len(bn) > 0 {
-			evMap["bass"] = bn
-			fmt.Printf("  Bass: %d notes\n", len(bn))
-		}
+	// Default motif in key.
+	motif := []int{0, 2, 4, 3, 0} // C-D-E-D-C
+	if plan.Key.Mode == "minor" {
+		motif = []int{0, 3, 5, 4, 0} // C-Eb-F-E-C
 	}
 
-	// --- Section transitions ---
-	if plan.TotalBars > 4 {
-		sectionNames := []string{"intro", "verse", "chorus", "bridge", "outro"}
-		energies := composer.BuildSectionProfile(sectionNames)
-		barStarts := make([]int, len(sectionNames))
-		for i := range sectionNames {
-			barStarts[i] = i * (plan.TotalBars / len(sectionNames))
-		}
-		composer.ApplyAllTransitions(evMap, energies, barStarts, plan.BPM)
-	}
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	_ = rng
 
-	// --- Drum density: style+energy adaptive ---
-	if drums, ok := evMap["drums"]; ok {
-		evMap["drums"] = composer.AdjustDrumDensity(drums, plan.FeatureVector.Energy, plan.TotalBars, *styleName)
-	}
-
-	// --- Dynamic layering (instrument count by energy) ---
-	if plan.TotalBars > 4 {
-		sectionNames := []string{"intro", "verse", "chorus", "bridge", "outro"}
-		energies := composer.BuildSectionProfile(sectionNames)
-		barStarts := make([]int, len(sectionNames))
-		for i := range sectionNames {
-			barStarts[i] = i * (plan.TotalBars / len(sectionNames))
-		}
-		composer.ApplyLayeredDynamics(evMap, energies, barStarts)
-	}
-
-	// --- Texture layer ---
-	texType := composer.SelectTexture(0.5)
-	composer.GenerateTexture(evMap, texType, plan.Key.Root, plan.TotalBars, plan.BPM, plan.FeatureVector.Energy)
-
-	// --- Voice crossing fix (DNA-controlled) ---
-	if composerDNA.AllowVoiceCrossing {
-		composer.FixVoiceCrossing(evMap)
-	}
-
-	// --- Creative Chaos ---
-	mutSeed := time.Now().UnixNano()
-	cc := mutation.DefaultChaos(composerDNA.Chaos, plan.FeatureVector.Energy, mutSeed)
-	for id, evs := range evMap {
-		evMap[id] = mutation.ApplyChaos(evs, cc, id)
-	}
-	fmt.Printf("  Chaos applied (%.1f)", composerDNA.Chaos)
+	// Run SongComposer.
+	evMap = composer.ComposeSong(motif, chordStrs, plan.TotalBars, basePitch, plan.BPM, rng)
+	fmt.Printf("  SongComposer: %d tracks", len(evMap))
 
 	agent.GenerateChordPad(plan, evMap)
 
@@ -215,12 +144,7 @@ func main() {
 	for _, at := range arr.Tracks {
 		if at.ID == "distorted_guitar" || at.ID == "rhythm_guitar" {
 			if _, exists := evMap["rhythm_guitar"]; !exists {
-				rg := generator.GenerateRhythmGuitar(*plan, at)
-				if len(rg) > 0 {
-					evMap["rhythm_guitar"] = rg
-					fmt.Printf("  Rhythm guitar: %d power chords\n", len(rg))
-				}
-			}
+					}
 		}
 	}
 
