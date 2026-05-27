@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/yourname/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
 // EnergyCurve describes the energy profile of a melody across bars.

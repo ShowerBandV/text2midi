@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/yourname/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
 // MotifExtractor analyzes a lead melody to find and develop thematic material.

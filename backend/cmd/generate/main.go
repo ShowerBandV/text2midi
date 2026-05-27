@@ -7,13 +7,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/yourname/text2midi/internal/agent"
-	"github.com/yourname/text2midi/internal/composer"
-	"github.com/yourname/text2midi/internal/generator"
-	"github.com/yourname/text2midi/internal/mutation"
-	"github.com/yourname/text2midi/internal/llm"
-	"github.com/yourname/text2midi/internal/midi"
-	"github.com/yourname/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/agent"
+	"github.com/ShowerBandV/text2midi/internal/composer"
+	"github.com/ShowerBandV/text2midi/internal/generator"
+	"github.com/ShowerBandV/text2midi/internal/mutation"
+	"github.com/ShowerBandV/text2midi/internal/llm"
+	"github.com/ShowerBandV/text2midi/internal/midi"
+	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
 func main() {

@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/yourname/text2midi/internal/generator"
-	"github.com/yourname/text2midi/internal/midi"
-	"github.com/yourname/text2midi/internal/schema"
-	"github.com/yourname/text2midi/internal/store"
+	"github.com/ShowerBandV/text2midi/internal/generator"
+	"github.com/ShowerBandV/text2midi/internal/midi"
+	"github.com/ShowerBandV/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/store"
 )
 
 func TestFullPipeline(t *testing.T) {

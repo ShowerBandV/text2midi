@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/yourname/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
 // RenderResult contains metadata about the rendered MIDI file.

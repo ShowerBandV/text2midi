@@ -22,12 +22,12 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/yourname/text2midi/internal/agent"
-	"github.com/yourname/text2midi/internal/llm"
-	"github.com/yourname/text2midi/internal/midi"
-	"github.com/yourname/text2midi/internal/schema"
-	"github.com/yourname/text2midi/internal/store"
-	"github.com/yourname/text2midi/internal/style"
+	"github.com/ShowerBandV/text2midi/internal/agent"
+	"github.com/ShowerBandV/text2midi/internal/llm"
+	"github.com/ShowerBandV/text2midi/internal/midi"
+	"github.com/ShowerBandV/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/store"
+	"github.com/ShowerBandV/text2midi/internal/style"
 )
 
 func main() {

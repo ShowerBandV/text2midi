@@ -4,8 +4,8 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/yourname/text2midi/internal/harmony"
-	"github.com/yourname/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/harmony"
+	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
 // noteToSemi and semiToNote for extension calculations.

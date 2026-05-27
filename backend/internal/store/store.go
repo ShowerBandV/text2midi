@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/yourname/text2midi/internal/midi"
+	"github.com/ShowerBandV/text2midi/internal/midi"
 )
 
 // FileRecord stores metadata about a generated MIDI file.

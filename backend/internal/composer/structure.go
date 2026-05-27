@@ -3,7 +3,7 @@
 // with per-section energy, instrument density, and drum pattern.
 package composer
 
-import "github.com/yourname/text2midi/internal/schema"
+import "github.com/ShowerBandV/text2midi/internal/schema"
 
 // Section describes one part of a song structure.
 type Section struct {

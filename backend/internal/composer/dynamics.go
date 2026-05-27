@@ -6,7 +6,7 @@ package composer
 import (
 	"fmt"
 
-	"github.com/yourname/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
 var rng struct{ n int }

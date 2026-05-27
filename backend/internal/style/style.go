@@ -2,7 +2,7 @@
 // Each entry captures rhythm, instrumentation, harmony, mood, and BPM range.
 package style
 
-import "github.com/yourname/text2midi/internal/schema"
+import "github.com/ShowerBandV/text2midi/internal/schema"
 
 // Info describes a music style.
 type Info struct {

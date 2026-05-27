@@ -6,7 +6,7 @@ package mutation
 import (
 	"math/rand"
 
-	"github.com/yourname/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
 // Rule defines a single mutation operation.

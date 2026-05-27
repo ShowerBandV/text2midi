@@ -3,7 +3,7 @@ package mutation
 import (
 	"math/rand"
 
-	"github.com/yourname/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
 // ChaosConfig controls the type and intensity of creative chaos.

@@ -8,9 +8,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/yourname/text2midi/internal/llm"
-	"github.com/yourname/text2midi/internal/schema"
-	"github.com/yourname/text2midi/internal/style"
+	"github.com/ShowerBandV/text2midi/internal/llm"
+	"github.com/ShowerBandV/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/style"
 )
 
 // ParseIntent calls the LLM to parse a user's text prompt into structured intent.

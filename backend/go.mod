@@ -1,3 +1,3 @@
-module github.com/yourname/text2midi
+module github.com/ShowerBandV/text2midi
 
 go 1.22
