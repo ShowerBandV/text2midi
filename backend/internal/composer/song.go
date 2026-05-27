@@ -171,12 +171,17 @@ func chordPitchesForChord(chord string, octave int) []int {
 // 4. Track Generation
 // ═══════════════════════════════════════════════════════════════════
 
-// GenerateDrumsFromEnergy creates a kick-snare-hat pattern based on section energy.
-func GenerateDrumsFromEnergy(timeline *Timeline, bpm int, rng *rand.Rand) []schema.NoteEvent {
+// GenerateDrumsFromEnergy creates a style-aware kick-snare-hat pattern.
+// Different styles get different rhythmic feels:
+//   Metal: kick-heavy, double bass feel (steps 0,2,4,6,8,10,12,14)
+//   Pop:   kick on 1&3 (0,8), snare on 2&4 (4,12)
+//   HipHop: syncopated kick, snare on beat 3 (8)
+//   LoFi:  simple, relaxed
+func GenerateDrumsFromEnergy(timeline *Timeline, bpm int, rng *rand.Rand, darkness, energy, rhythmic, tension float64) []schema.NoteEvent {
 	var events []schema.NoteEvent
 
 	for _, sec := range timeline.Sections {
-		pattern := drumPatternForEnergy(sec.Energy)
+		pattern := drumPatternForStyle(darkness, energy, rhythmic, tension)
 		for bar := sec.StartBar; bar < sec.EndBar; bar++ {
 			base := float64(bar) * 4.0
 			for step := 0; step < 16; step++ {
@@ -203,15 +208,67 @@ func GenerateDrumsFromEnergy(timeline *Timeline, bpm int, rng *rand.Rand) []sche
 	return events
 }
 
-func drumPatternForEnergy(energy float64) [16]int {
+// drumPatternForStyle returns a 16-step drum pattern based on musical style.
+// Style is determined by feature vector dimensions.
+func drumPatternForStyle(darkness, energy, rhythmic, tension float64) [16]int {
 	var p [16]int
-	hits := int(energy * 10)
-	if hits < 2 {
-		hits = 2
+
+	switch {
+	case darkness > 0.7 && energy > 0.7 && tension > 0.5:
+		// Metal / aggressive: double kick, snare on 2&4, heavy.
+		// kick on all strong 8th notes (0,2,4,6,8,10,12,14)
+		for i := 0; i < 16; i += 2 {
+			p[i] = 1
+		}
+		// snare on 4, 12
+		p[4] = 2
+		p[12] = 2
+
+	case energy > 0.5 && rhythmic < 0.5:
+		// Pop / rock: kick on 1&3, snare on 2&4
+		p[0] = 1  // kick beat 1
+		p[4] = 2  // snare beat 2
+		p[8] = 1  // kick beat 3
+		p[12] = 2 // snare beat 4
+		// hi-hat 8th notes (odd steps)
+		for i := 1; i < 16; i += 2 {
+			p[i] = 1
+		}
+
+	case energy > 0.3 && rhythmic > 0.5:
+		// Hip-hop / trap: syncopated kick, snare on 3
+		p[0] = 1  // kick
+		p[4] = 1  // kick (syncopated)
+		p[8] = 2  // snare on 3
+		p[12] = 1 // kick
+		// hi-hat rolls
+		for i := 0; i < 16; i++ {
+			if i%2 == 1 || i%4 == 3 {
+				p[i] = 1
+			}
+		}
+
+	case energy < 0.4:
+		// Lo-fi / ambient: simple, sparse
+		p[0] = 1  // kick downbeat
+		p[8] = 2  // snare or clap on beat 3
+		// gentle hi-hat on offbeats
+		p[3] = 1
+		p[7] = 1
+		p[11] = 1
+		p[15] = 1
+
+	default:
+		// Default: simple 4/4
+		p[0] = 1
+		p[4] = 2
+		p[8] = 1
+		p[12] = 2
+		for i := 1; i < 16; i += 2 {
+			p[i] = 1
+		}
 	}
-	for i := 0; i < hits && i < 16; i++ {
-		p[i*16/hits] = 1
-	}
+
 	return p
 }
 
@@ -271,10 +328,9 @@ func GeneratePadFromHarmony(chordProg []string, timeline *Timeline) []schema.Not
 // 5. Song Composer — Full Pipeline
 // ═══════════════════════════════════════════════════════════════════
 
-// ComposeSong runs the full composition pipeline.
-// Input: motif (relative intervals), chords (chord symbols), totalBars
-// Output: eventsByTrack for MIDI rendering.
-func ComposeSong(motif []int, chords []string, totalBars, basePitch, bpm int, rng *rand.Rand) map[string][]schema.NoteEvent {
+// ComposeSong runs the full composition pipeline with style-aware drums.
+// Input: motif, chords, feature vector dimensions for style-aware generation.
+func ComposeSong(motif []int, chords []string, totalBars, basePitch, bpm int, rng *rand.Rand, darkness, energy, rhythmic, tension float64) map[string][]schema.NoteEvent {
 	evMap := make(map[string][]schema.NoteEvent)
 
 	if len(motif) < 2 {
@@ -293,8 +349,8 @@ func ComposeSong(motif []int, chords []string, totalBars, basePitch, bpm int, rn
 	timeline := BuildTimeline(sectionDefs, totalBars)
 	fmt.Printf("[SongComposer] timeline: %d sections, %d bars\n", len(timeline.Sections), timeline.TotalBars)
 
-	// Step 2: Generate drums.
-	evMap["drums"] = GenerateDrumsFromEnergy(timeline, bpm, rng)
+	// Step 2: Generate drums (style-aware).
+	evMap["drums"] = GenerateDrumsFromEnergy(timeline, bpm, rng, darkness, energy, rhythmic, tension)
 	fmt.Printf("[SongComposer] drums: %d events\n", len(evMap["drums"]))
 
 	// Step 3: Generate bass.

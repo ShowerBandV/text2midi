@@ -136,7 +136,9 @@ func main() {
 	_ = rng
 
 	// Run SongComposer.
-	evMap = composer.ComposeSong(motif, chordStrs, plan.TotalBars, basePitch, plan.BPM, rng)
+	evMap = composer.ComposeSong(motif, chordStrs, plan.TotalBars, basePitch, plan.BPM, rng,
+		plan.FeatureVector.Darkness, plan.FeatureVector.Energy,
+		plan.FeatureVector.RhythmicComplexity, plan.FeatureVector.Tension)
 	fmt.Printf("  SongComposer: %d tracks", len(evMap))
 
 	agent.GenerateChordPad(plan, evMap)
