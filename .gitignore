@@ -26,6 +26,9 @@ backend/_bmad/
 # Python util scripts (local PDF→MD conversion tools)
 python-util/
 
+# Generated MIDI output
+backend/generated/
+
 # Music wiki raw data (PDFs + generated markdown)
 music_wiki_raw/
 backend/midi_output/
