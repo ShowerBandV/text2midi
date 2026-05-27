@@ -248,149 +248,179 @@ func (e *Extractor) extractMotif(eventsByTrack map[string][]schema.NoteEvent, to
 		return lead[i].StartBeat < lead[j].StartBeat
 	})
 
-	// Convert to interval sequence: [0, +2, +4, +3, ...]
-	// Base the intervals from the first note.
+	// Step 1: Normalize — remove absolute pitch, keep intervals from first note.
 	base := lead[0].Pitch
 	intervals := make([]int, 0, len(lead))
+	durations := make([]float64, 0, len(lead))
 	for _, ev := range lead {
 		intervals = append(intervals, ev.Pitch-base)
+		durations = append(durations, ev.DurationBeat)
 	}
 
-	// Sliding window to find repeating patterns.
-	windowSizes := []int{3, 4, 5, 6}
-	type patternScore struct {
+	// Step 2: Convert to relative interval changes (the core recognition space).
+	relativeInts := make([]int, 0, len(intervals)-1)
+	for i := 1; i < len(intervals); i++ {
+		relativeInts = append(relativeInts, intervals[i]-intervals[i-1])
+	}
+
+	// Step 3: Sliding window at multiple sizes.
+	type candidate struct {
+		pattern    []int
+		rhythm     []float64
+		startIdx   int
+		windowSize int
+	}
+
+	var allCandidates []candidate
+	for ws := 3; ws <= 8 && ws <= len(relativeInts); ws++ {
+		for start := 0; start <= len(relativeInts)-ws; start++ {
+			c := candidate{
+				pattern:    relativeInts[start : start+ws],
+				rhythm:     durations[start : start+ws],
+				startIdx:   start,
+				windowSize: ws,
+			}
+			allCandidates = append(allCandidates, c)
+		}
+	}
+
+	// Step 4: Hash-based frequency counting.
+	type scoredMotif struct {
 		pattern []int
-		score   int
+		rhythm  []float64
+		freq    int
+		length  int
 	}
 
-	var scoredPatterns []patternScore
-
-	for _, ws := range windowSizes {
-		if ws > len(intervals)/2 {
-			break
-		}
-		// Slide window across the interval sequence.
-		patterns := make(map[string]int) // pattern string → count
-
-		for start := 0; start <= len(intervals)-ws; start++ {
-			pat := intervals[start : start+ws]
-			key := fmt.Sprintf("%v", pat)
-			patterns[key]++
-		}
-
-		// Find most frequent pattern for this window size.
-		bestKey := ""
-		bestCount := 0
-		for key, count := range patterns {
-			if count > bestCount {
-				bestCount = count
-				bestKey = key
+	freq := make(map[string]*scoredMotif)
+	for _, c := range allCandidates {
+		key := intsKey(c.pattern)
+		if _, ok := freq[key]; !ok {
+			freq[key] = &scoredMotif{
+				pattern: c.pattern,
+				rhythm:  c.rhythm,
+				length:  c.windowSize,
 			}
 		}
+		freq[key].freq++
+	}
 
-		if bestCount > 1 {
-			// Parse the pattern from the key.
-			var pat []int
-			fmt.Sscanf(bestKey, "%v", &pat)
-			scoredPatterns = append(scoredPatterns, patternScore{
-				pattern: pat,
-				score:   bestCount * ws,
-			})
+	// Step 5: Score and select dominant motif.
+	// score = freq*0.6 + length*0.2 + (1 if rhythm varies)*0.2
+	var best *scoredMotif
+	bestScore := 0.0
+
+	for _, sm := range freq {
+		rhythmScore := 0.0
+		if len(sm.rhythm) > 0 {
+			// Check if rhythm has variation (not all same duration).
+			allSame := true
+			for i := 1; i < len(sm.rhythm); i++ {
+				if math.Abs(sm.rhythm[i]-sm.rhythm[0]) > 0.05 {
+					allSame = false
+					break
+				}
+			}
+			if !allSame {
+				rhythmScore = 0.2
+			}
+		}
+		score := float64(sm.freq)*0.6 + float64(sm.length)*0.2 + rhythmScore
+		if score > bestScore {
+			bestScore = score
+			best = sm
 		}
 	}
 
-	if len(scoredPatterns) == 0 && len(intervals) >= 4 {
-		// Fallback: use first 4 notes as motif.
-		md.Pattern = intervals[:4]
-		md.Confidence = 0.3
-	} else {
-		// Pick the highest-scoring pattern.
-		best := scoredPatterns[0]
-		for _, sp := range scoredPatterns[1:] {
-			if sp.score > best.score {
-				best = sp
-			}
-		}
+	if best != nil && len(best.pattern) > 0 {
 		md.Pattern = best.pattern
-		md.Confidence = float64(best.score) / float64(len(intervals))
+		md.Rhythm = best.rhythm
+		md.Confidence = bestScore / float64(len(intervals))
 		if md.Confidence > 1.0 {
 			md.Confidence = 1.0
 		}
+
+		// Detect variants.
+		md.Variants = detectVariants(relativeInts, best.pattern, durations)
 	}
-
-	// Extract rhythm (durations of the motif notes).
-	if len(md.Pattern) > 0 && len(lead) >= len(md.Pattern) {
-		md.Rhythm = make([]float64, len(md.Pattern))
-		for i := range md.Pattern {
-			if i < len(lead) {
-				md.Rhythm[i] = lead[i].DurationBeat
-			}
-		}
-	}
-
-	// Detect variants by comparing later phrases.
-	md.Variants = detectVariants(intervals, md.Pattern)
-
-	info := fmt.Sprintf("[MotifExtractor] pattern=%v, confidence=%.2f, variants=%d\n",
-		md.Pattern, md.Confidence, len(md.Variants))
-	_ = info // printed by caller
 	return md
 }
 
-// detectVariants finds transpositions, inversions of the motif in the full sequence.
-func detectVariants(fullIntervalSeq, motif []int) []MotifVariant {
-	if len(motif) < 2 || len(fullIntervalSeq) < len(motif)*2 {
+func intsKey(ints []int) string {
+	if len(ints) == 0 {
+		return ""
+	}
+	b := make([]byte, 0, len(ints)*4)
+	for _, v := range ints {
+		// Compact encoding: each int as 2 bytes (+-999 range)
+		b = append(b, byte((v+1000)>>8), byte((v+1000)&0xFF))
+	}
+	return string(b)
+}
+
+// detectVariants finds transpositions, inversions of the motif in the full interval sequence.
+func detectVariants(fullSeq, motif []int, durations []float64) []MotifVariant {
+	if len(motif) < 2 || len(fullSeq) < len(motif)*2 {
 		return nil
 	}
 
 	var variants []MotifVariant
+	skip := 0
 
-	// Scan the full sequence for pattern matches at different positions.
-	for start := len(motif); start <= len(fullIntervalSeq)-len(motif); start++ {
-		candidate := fullIntervalSeq[start : start+len(motif)]
+	for start := len(motif); start <= len(fullSeq)-len(motif); start++ {
+		skip++
+		if skip%2 == 0 {
+			continue // check every other position for efficiency
+		}
+		candidate := fullSeq[start : start+len(motif)]
 
-		// Check transposition (all intervals shifted by same amount).
-		isTranspose := true
+		// Check transposition: same interval pattern, shifted by constant.
+		isSameShape := true
 		for i := 1; i < len(motif); i++ {
 			if candidate[i]-candidate[i-1] != motif[i]-motif[i-1] {
-				isTranspose = false
+				isSameShape = false
 				break
 			}
 		}
-		if isTranspose {
-			variants = append(variants, MotifVariant{
-				Type:    "transpose",
-				Pattern: candidate,
-			})
+		if isSameShape {
+			variants = append(variants, MotifVariant{Type: "transpose", Pattern: candidate})
 			continue
 		}
 
-		// Check inversion (intervals reversed).
+		// Check inversion: intervals reversed.
 		isInvert := true
 		for i := 0; i < len(motif) && i < len(candidate); i++ {
-			if math.Abs(float64(candidate[i]-motif[len(motif)-1-i])) > 2 {
+			if abs(candidate[i]+motif[len(motif)-1-i]) > 2 {
 				isInvert = false
 				break
 			}
 		}
 		if isInvert {
-			variants = append(variants, MotifVariant{
-				Type:    "invert",
-				Pattern: candidate,
-			})
+			variants = append(variants, MotifVariant{Type: "invert", Pattern: candidate})
 			continue
 		}
 
-		// Check fragmentation (first 2-3 notes match).
-		if len(motif) >= 3 && math.Abs(float64(candidate[0]-motif[0])) <= 2 &&
-			math.Abs(float64(candidate[1]-motif[1])) <= 2 &&
-			math.Abs(float64(candidate[2]-motif[2])) <= 2 {
-			variants = append(variants, MotifVariant{
-				Type:    "fragment",
-				Pattern: candidate,
-			})
+		// Check fragment: first 2-3 notes match.
+		if len(motif) >= 3 && abs(candidate[0]-motif[0]) <= 2 &&
+			abs(candidate[1]-motif[1]) <= 2 {
+			// Check rhythm similarity.
+			if len(durations) > start+1 {
+				rhythmRatio := durations[start] / durations[0]
+				if rhythmRatio > 0.5 && rhythmRatio < 2.0 {
+					variants = append(variants, MotifVariant{Type: "fragment", Pattern: candidate})
+				}
+			}
 		}
 	}
 
 	return variants
 }
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func unused() {}
