@@ -25,6 +25,7 @@ backend/_bmad/
 
 # Music wiki raw data (PDFs + generated markdown)
 music_wiki_raw/
+backend/midi_output/
 
 # IDE
 .idea/

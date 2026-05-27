@@ -5,10 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/yourname/text2midi/internal/agent"
 	"github.com/yourname/text2midi/internal/composer"
 	"github.com/yourname/text2midi/internal/generator"
+	"github.com/yourname/text2midi/internal/mutation"
 	"github.com/yourname/text2midi/internal/llm"
 	"github.com/yourname/text2midi/internal/midi"
 	"github.com/yourname/text2midi/internal/schema"
@@ -78,6 +81,9 @@ func main() {
 	// Pick composer personality.
 	composerDNA := composer.PickComposer(*styleName, *prompt, mood)
 	fmt.Printf("  Composer: %s", composerDNA.Name)
+	// --- SongMemory: track motif and section info ---
+	songMem := composer.NewSongMemory()
+
 
 	// Enable/disable post-processing based on DNA.
 		if *bpm > 0 {
@@ -143,6 +149,7 @@ func main() {
 		ln = composer.ApplyGroove(ln, gs)
 		evMap["lead"] = ln
 		fmt.Printf("  Lead: %d notes (metal=%v)", len(ln), isMetal)
+	songMem.LearnMotif(ln)
 	}
 
 	if lead, ok := evMap["lead"]; ok && len(lead) > 0 {
@@ -153,6 +160,45 @@ func main() {
 			fmt.Printf("  Bass: %d notes\n", len(bn))
 		}
 	}
+
+	// --- Section transitions ---
+	if plan.TotalBars > 4 {
+		sectionNames := []string{"intro", "verse", "chorus", "bridge", "outro"}
+		energies := composer.BuildSectionProfile(sectionNames)
+		barStarts := make([]int, len(sectionNames))
+		for i := range sectionNames {
+			barStarts[i] = i * (plan.TotalBars / len(sectionNames))
+		}
+		composer.ApplyAllTransitions(evMap, energies, barStarts, plan.BPM)
+	}
+
+	// --- Dynamic layering (instrument count by energy) ---
+	if plan.TotalBars > 4 {
+		sectionNames := []string{"intro", "verse", "chorus", "bridge", "outro"}
+		energies := composer.BuildSectionProfile(sectionNames)
+		barStarts := make([]int, len(sectionNames))
+		for i := range sectionNames {
+			barStarts[i] = i * (plan.TotalBars / len(sectionNames))
+		}
+		composer.ApplyLayeredDynamics(evMap, energies, barStarts)
+	}
+
+	// --- Texture layer ---
+	texType := composer.SelectTexture(0.5)
+	composer.GenerateTexture(evMap, texType, plan.Key.Root, plan.TotalBars, plan.BPM, plan.FeatureVector.Energy)
+
+	// --- Voice crossing fix (DNA-controlled) ---
+	if composerDNA.AllowVoiceCrossing {
+		composer.FixVoiceCrossing(evMap)
+	}
+
+	// --- Creative Chaos ---
+	mutSeed := time.Now().UnixNano()
+	cc := mutation.DefaultChaos(composerDNA.Chaos, plan.FeatureVector.Energy, mutSeed)
+	for id, evs := range evMap {
+		evMap[id] = mutation.ApplyChaos(evs, cc, id)
+	}
+	fmt.Printf("  Chaos applied (%.1f)", composerDNA.Chaos)
 
 	agent.GenerateChordPad(plan, evMap)
 
@@ -220,6 +266,10 @@ func main() {
 		},
 		Tracks: tracks,
 	}
+
+	// --- Stem export ---
+	composer.EnsureStemDir(outputPath)
+	composer.ExportStems(midiIR, filepath.Dir(outputPath), name, nil)
 
 	result, err := midi.RenderMIDI(midiIR, outputPath, nil)
 	if err != nil {
