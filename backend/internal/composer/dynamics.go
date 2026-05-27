@@ -21,13 +21,13 @@ type DynamicLayer struct {
 var DynamicLayers = []DynamicLayer{
 	{
 		EnergyThreshold: 0.0,
-		Instruments:     []string{"pad", "hihat"},
-		Description:     "Ambient + light percussion",
+		Instruments:     []string{"pad", "drums"},
+		Description:     "Ambient + minimal drums",
 	},
 	{
 		EnergyThreshold: 0.3,
-		Instruments:     []string{"pad", "bass", "hihat", "drums", "piano"},
-		Description:     "Foundation: bass + drums (reduced) + piano",
+		Instruments:     []string{"pad", "bass", "drums", "piano"},
+		Description:     "Foundation: bass + drums + piano",
 	},
 	{
 		EnergyThreshold: 0.5,
