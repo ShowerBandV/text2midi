@@ -125,11 +125,12 @@ func main() {
 		basePitch = 65
 	}
 
-	// Default motif in key.
-	motif := []int{0, 2, 4, 3, 0} // C-D-E-D-C
-	if plan.Key.Mode == "minor" {
-		motif = []int{0, 3, 5, 4, 0} // C-Eb-F-E-C
-	}
+	// Style-aware motif derived from feature vector.
+	// High energy + high rhythmic → aggressive intervals (fourths, fifths).
+	// Low energy + high lofi → stepwise motion, narrow range.
+	// High tension → augmented/diminished intervals.
+	fv := plan.FeatureVector
+	motif := styleAwareMotif(fv.Darkness, fv.Energy, fv.Tension, fv.RhythmicComplexity, plan.Key.Mode)
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	_ = rng
@@ -217,6 +218,37 @@ func main() {
 	fmt.Printf("  Tracks: %d | Notes: %d | Duration: %.1fs\n",
 		result.TotalTracks, result.TotalNoteEvents, result.DurationSeconds)
 	fmt.Println("  Done!")
+}
+
+// styleAwareMotif generates a motif based on musical feature vector.
+// This ensures different styles use different interval patterns.
+func styleAwareMotif(darkness, energy, tension, rhythmic float64, mode string) []int {
+	switch {
+	case energy > 0.7 && rhythmic > 0.5 && tension > 0.5:
+		// Aggressive battle music: fourths, fifths, large intervals
+		return []int{0, 5, 7, 5, 0, 7, 10, 5} // power chord arpeggios
+	case energy > 0.6 && rhythmic < 0.4 && tension < 0.4:
+		// Pop / upbeat: pentatonic, stepwise
+		return []int{0, 2, 4, 5, 4, 2, 0, 2} // classic pop
+	case darkness > 0.6 && energy < 0.4:
+		// Dark ambient / sad: minor thirds, descending
+		if mode == "minor" {
+			return []int{0, 3, 2, 0, -2, 0, 2, 3} // melancholic fall
+		}
+		return []int{0, 3, 5, 3, 0, -2, 0, 2} // bluesy
+	case tension > 0.6 && darkness > 0.5:
+		// Tense / thriller: tritone, augmented
+		return []int{0, 6, 3, 6, 0, 4, 2, 0} // diminished feel
+	case rhythmic > 0.6 && tension > 0.4:
+		// Hip-hop / trap: syncopated, repetitive
+		return []int{0, 3, 5, 3, 5, 3, 0, 3} // loop-oriented
+	default:
+		// Default: pentatonic, balanced
+		if mode == "minor" {
+			return []int{0, 3, 5, 4, 0}
+		}
+		return []int{0, 2, 4, 3, 0}
+	}
 }
 
 func toFloat(v any) float64 {
