@@ -23,8 +23,8 @@ venv/
 backend/.claude/
 backend/_bmad/
 
-# Source PDFs (large files, keep generated .md only)
-music_wiki_raw/*.pdf
+# Music wiki raw data (PDFs + generated markdown)
+music_wiki_raw/
 
 # IDE
 .idea/
