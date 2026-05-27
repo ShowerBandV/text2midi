@@ -1,0 +1,377 @@
+// Command server starts the HTTP API for MIDI beat generation.
+//
+// Endpoints:
+//   GET  /api/info       --style info, BPM ranges, max bars per tier
+//   POST /api/generate   --generate a MIDI beat (free tier: max 8 bars)
+//
+// Environment:
+//   PORT              --listen port (default 8080)
+//   OPENAI_API_KEY    --required for LLM calls
+//   OPENAI_MODEL      --model name (default deepseek-chat)
+//   OPENAI_BASE_URL   --API base URL (default https://api.deepseek.com/v1)
+package main
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sync"
+
+	"github.com/yourname/text2midi/internal/agent"
+	"github.com/yourname/text2midi/internal/llm"
+	"github.com/yourname/text2midi/internal/midi"
+	"github.com/yourname/text2midi/internal/schema"
+	"github.com/yourname/text2midi/internal/store"
+)
+
+func main() {
+	llm.LoadDotEnv()
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	outputDir := "./generated"
+	fs := store.NewFileStore(outputDir)
+
+	mux := http.NewServeMux()
+	srv := &Server{fs: fs, outputDir: outputDir}
+
+	mux.HandleFunc("GET /api/info", srv.handleInfo)
+	mux.HandleFunc("POST /api/generate", srv.handleGenerate)
+	mux.HandleFunc("GET /api/files/{id}", srv.handleDownload)
+
+	addr := ":" + port
+	log.Printf("🚀 Server starting on %s", addr)
+	log.Printf("   POST /api/generate  --generate a beat")
+	log.Printf("   GET  /api/info       --style constraints")
+	log.Printf("   GET  /api/files/{id} --download MIDI file")
+
+	if err := http.ListenAndServe(addr, withCORS(mux)); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// Server holds shared state for HTTP handlers.
+type Server struct {
+	fs        *store.FileStore
+	outputDir string
+	mu        sync.Mutex // protects concurrent generation
+}
+
+// --- Types ---
+
+type InfoResponse struct {
+	Tiers    map[string]int                   `json:"tiers"`    // tier ->maxBars
+	Formats  map[string]string                `json:"formats"`  // style ->"BPM range"
+}
+
+type GenerateRequest struct {
+	Prompt          string             `json:"prompt"`
+	Style           string             `json:"style"`
+	BPM             int                `json:"bpm"`
+	Bars            int                `json:"bars"`
+	Key             string             `json:"key"`
+	Tier            string             `json:"tier,omitempty"`          // default "free"
+	FeatureOverride *schema.FeatureVector `json:"feature_override,omitempty"` // override feature_vector dimensions
+	Seed            *int64             `json:"seed,omitempty"`          // random seed for reproducible variation
+}
+
+type GenerateResponse struct {
+	Success  bool              `json:"success"`
+	FileID   string            `json:"fileId,omitempty"`
+	FileName string            `json:"fileName,omitempty"`
+	FileSize int64             `json:"fileSize,omitempty"`
+	Duration float64           `json:"durationSeconds"`
+	Tracks   int               `json:"tracks"`
+	Meta     *midi.RenderResult `json:"meta,omitempty"`
+	Error    string            `json:"error,omitempty"`
+}
+
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+// --- Handlers ---
+
+func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
+	}
+
+	resp := InfoResponse{
+		Styles: styles,
+		Tiers: map[string]int{
+		},
+		Formats: make(map[string]string),
+	}
+		resp.Formats[string(st)] = fmt.Sprintf("%d-%d BPM", info.MinBPM, info.MaxBPM)
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
+	var req GenerateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
+		return
+	}
+
+	// Defaults.
+	if req.Tier == "" {
+		req.Tier = "free"
+	}
+	if req.Key == "" {
+		req.Key = "C minor"
+	}
+
+	// Validate.
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	// Generate (serialized to prevent resource contention).
+	s.mu.Lock()
+	result, err := s.generate(req)
+	s.mu.Unlock()
+
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "missing id"})
+		return
+	}
+
+	data, record, err := s.fs.LoadFile(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "file not found"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "audio/midi")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, record.FileName))
+	w.Write(data)
+}
+
+// --- Core generation ---
+
+func (s *Server) generate(req GenerateRequest) (*GenerateResponse, error) {
+	client, err := llm.NewClient()
+	if err != nil {
+		return nil, fmt.Errorf("LLM client: %w", err)
+	}
+
+	// 1. ParseIntent.
+	intentResult, err := agent.ParseIntent(client, req.Prompt, false, nil)
+	if err != nil {
+		return nil, fmt.Errorf("intent: %w", err)
+	}
+
+	// 1b. Apply feature_override if provided.
+	if req.FeatureOverride != nil {
+		intentMap, ok := intentResult["intent"].(map[string]any)
+		if ok {
+			fv, hasFV := intentMap["feature_vector"].(map[string]any)
+			if !hasFV {
+				fv = make(map[string]any)
+			}
+			if req.FeatureOverride.Darkness != 0 || req.FeatureOverride.Energy != 0 ||
+				req.FeatureOverride.Acousticness != 0 || req.FeatureOverride.Density != 0 ||
+				req.FeatureOverride.RhythmicComplexity != 0 || req.FeatureOverride.Tension != 0 ||
+				req.FeatureOverride.LoFi != 0 {
+				fv["darkness"] = req.FeatureOverride.Darkness
+				fv["energy"] = req.FeatureOverride.Energy
+				fv["acousticness"] = req.FeatureOverride.Acousticness
+				fv["density"] = req.FeatureOverride.Density
+				fv["rhythmic_complexity"] = req.FeatureOverride.RhythmicComplexity
+				fv["tension"] = req.FeatureOverride.Tension
+				fv["lo_fi"] = req.FeatureOverride.LoFi
+				intentMap["feature_vector"] = fv
+				log.Printf("  feature_override applied: %+v", req.FeatureOverride)
+			}
+		}
+	}
+
+	// 2. PlanSong.
+	plan, songPlanRaw, err := agent.PlanSong(client, intentResult)
+	if err != nil {
+		return nil, fmt.Errorf("song plan: %w", err)
+	}
+
+	// 2b. Set feature_vector on SongPlan from parsed intent.
+	plan.FeatureVector = agent.ParseFeatureVectorFromIntent(intentResult)
+
+	// 3. PlanArrangement.
+	arr, _, err := agent.PlanArrangement(client, intentResult, songPlanRaw, true)
+	if err != nil {
+		return nil, fmt.Errorf("arrangement: %w", err)
+	}
+
+	// 4. Generate patterns (beat template).
+	sd := fmt.Sprintf("%s beat, BPM %d", req.Style, req.BPM)
+	eventsByTrack, ccEvents, pbEvents, err := agent.GeneratePatterns(client, req.Prompt, req.Style, sd,
+		plan.Key.Root+" "+plan.Key.Mode, plan.BPM, plan.TotalBars, plan.FeatureVector)
+	if err != nil {
+		return nil, fmt.Errorf("patterns: %w", err)
+	}
+
+	// 4b. Generate chord pad + auto-add missing tracks.
+	agent.GenerateChordPad(plan, eventsByTrack)
+	existing := map[string]bool{}
+	for _, t := range arr.Tracks {
+		existing[t.ID] = true
+	}
+	type autoTrack struct {
+		id, name, role string
+		channel, prog, vol, pan int
+	}
+	for _, c := range []autoTrack{
+		{"bass", "Bass", "bass", 1, 34, 90, 64},
+		{"drums", "Drums", "drums", 9, 0, 100, 64},
+		{"chords", "Chords", "harmony", 4, 89, 75, 64},
+		{"pad", "Pad", "Pad", 5, 91, 70, 64},
+	} {
+		if existing[c.id] { continue }
+		ev := eventsByTrack[c.id]
+		if ev == nil || len(ev) == 0 { continue }
+		prog := c.prog
+		arr.Tracks = append(arr.Tracks, schema.ArrangementTrack{
+			ID: c.id, Name: c.name, Role: c.role, Enabled: true,
+			IsCoreTrack: false, GenerationStrategy: "auto",
+			Channel: c.channel, Program: &prog, Volume: c.vol, Pan: c.pan,
+		})
+		log.Printf("  auto-added track %s (%d events)", c.id, len(ev))
+	}
+
+	// 5. Assemble MidiIR.
+	beatsPerBar := 4
+	totalBeats := plan.TotalBars * beatsPerBar
+	var tracks []schema.TrackIR
+	for _, at := range arr.Tracks {
+		if !at.Enabled {
+			continue
+		}
+		events := lookupEvents(eventsByTrack, at.ID, at.Role)
+		tracks = append(tracks, schema.TrackIR{
+			ID: at.ID, Name: at.Name, Role: at.Role,
+			Channel: at.Channel, Program: at.Program,
+			Volume: at.Volume, Pan: at.Pan, Enabled: true,
+			IsCoreTrack: at.IsCoreTrack, Events: events,
+			CCEvents: ccEvents,
+			PitchBendEvents: pbEvents,
+		})
+	}
+
+	midiIR := schema.MidiIR{
+		Meta: schema.Meta{
+			Title:        plan.Title,
+			BPM:          plan.BPM,
+			TicksPerBeat: 480,
+			TimeSignature: schema.TimeSignature{Numerator: 4, Denominator: 4},
+			KeySignature:  fmt.Sprintf("%s %s", plan.Key.Root, plan.Key.Mode),
+			TotalBars:     plan.TotalBars,
+			BeatsPerBar:   beatsPerBar,
+			TotalBeats:    totalBeats,
+			Loopable:      plan.Loopable,
+		},
+		Tracks: tracks,
+	}
+
+	// 6. Render.
+	outputPath := filepath.Join(s.outputDir, plan.Title+".mid")
+	renderResult, err := midi.RenderMIDI(midiIR, outputPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("render: %w", err)
+	}
+
+	// 7. Save to file store.
+	midiData, err := os.ReadFile(outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("read output: %w", err)
+	}
+	fileID := fmt.Sprintf("%s_%s", plan.Title, randID(8))
+	record, err := s.fs.SaveFile(fileID, midiData, renderResult)
+	if err != nil {
+		return nil, fmt.Errorf("save: %w", err)
+	}
+
+	return &GenerateResponse{
+		Success:  true,
+		FileID:   record.ID,
+		FileName: record.FileName,
+		FileSize: record.FileSize,
+		Duration: renderResult.DurationSeconds,
+		Tracks:   renderResult.TotalTracks,
+		Meta:     renderResult,
+	}, nil
+}
+
+// --- helpers ---
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+
+func randID(n int) string {
+	b := make([]byte, n)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// withCORS wraps a handler with permissive CORS headers (for local dev).
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// lookupEvents finds events for a track by ID first, then falls back to role-based lookup.
+func lookupEvents(eventsByTrack map[string][]schema.NoteEvent, id, role string) []schema.NoteEvent {
+	if ev, ok := eventsByTrack[id]; ok && len(ev) > 0 {
+		return ev
+	}
+	roleMap := map[string]string{
+		"melody": "lead", "lead": "lead", "piano": "lead", "keys": "lead", "synth": "lead",
+		"chords": "lead", "harmony": "lead", "pad": "lead", "strings": "lead",
+		"distorted_guitar": "lead", "lead_guitar": "lead", "guitar": "lead", "rhythm_guitar": "lead",
+		"bass": "bass", "bassline": "bass", "synth bass": "bass",
+		"rhythm": "drums", "drums": "drums", "percussion": "drums", "beat": "drums",
+	}
+	if beatID, ok := roleMap[role]; ok {
+		if ev, ok := eventsByTrack[beatID]; ok && len(ev) > 0 {
+			return ev
+		}
+	}
+	for _, stdID := range []string{"lead", "drums", "bass"} {
+		if ev, ok := eventsByTrack[stdID]; ok && len(ev) > 0 {
+			return ev
+		}
+	}
+	return []schema.NoteEvent{}
+}
+
+func init() {
+	os.MkdirAll("./generated", 0755)
+}

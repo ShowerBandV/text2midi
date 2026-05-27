@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>text2midi - AI 音乐生成</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', sans-serif; background: #0a0a0f; color: #e0e0e0; min-height: 100vh; }
+
+.container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+
+.header { text-align: center; margin-bottom: 48px; }
+.header h1 { font-size: 36px; font-weight: 700; background: linear-gradient(135deg, #6366f1, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.header p { color: #888; margin-top: 8px; font-size: 14px; }
+
+.card { background: #13131a; border: 1px solid #1f1f2a; border-radius: 16px; padding: 24px; margin-bottom: 20px; }
+
+textarea { width: 100%; background: #0a0a0f; border: 1px solid #1f1f2a; border-radius: 10px; color: #e0e0e0; padding: 14px; font-size: 15px; font-family: inherit; resize: vertical; min-height: 90px; outline: none; transition: border 0.2s; }
+textarea:focus { border-color: #6366f1; }
+
+.params { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+.param label { display: block; font-size: 12px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.param input, .param select { width: 100%; background: #0a0a0f; border: 1px solid #1f1f2a; border-radius: 8px; color: #e0e0e0; padding: 10px 12px; font-size: 14px; outline: none; }
+.param input:focus, .param select:focus { border-color: #6366f1; }
+.param select option { background: #13131a; }
+
+.btn-group { display: flex; gap: 12px; margin-top: 16px; }
+.btn { flex: 1; padding: 14px 24px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-primary { background: linear-gradient(135deg, #6366f1, #a855f7); color: white; }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(99,102,241,0.3); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-secondary { background: #1f1f2a; color: #e0e0e0; }
+.btn-secondary:hover { background: #2a2a38; }
+
+.spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.result { display: none; }
+.result.show { display: block; }
+
+.result-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0; }
+.meta-item { background: #0a0a0f; border-radius: 10px; padding: 14px; text-align: center; }
+.meta-value { font-size: 22px; font-weight: 700; color: #a855f7; }
+.meta-label { font-size: 11px; color: #666; margin-top: 4px; text-transform: uppercase; }
+
+.audioplayer { width: 100%; margin: 16px 0; border-radius: 8px; }
+
+.tracks { margin-top: 12px; }
+.track-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1f1f2a; font-size: 13px; }
+.track-row:last-child { border-bottom: none; }
+.track-name { color: #a855f7; font-weight: 500; }
+.track-notes { color: #888; }
+
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.preset-tag { background: #1f1f2a; border: 1px solid transparent; border-radius: 20px; padding: 6px 14px; font-size: 12px; cursor: pointer; transition: all 0.2s; color: #aaa; }
+.preset-tag:hover { border-color: #6366f1; color: #e0e0e0; }
+.preset-tag.active { background: #6366f1; color: white; border-color: #6366f1; }
+
+.error-msg { color: #ef4444; font-size: 13px; margin-top: 8px; display: none; }
+.history { margin-top: 24px; }
+.history-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #0a0a0f; border-radius: 10px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s; }
+.history-item:hover { background: #1a1a24; }
+.history-title { font-weight: 500; }
+.history-meta { font-size: 12px; color: #666; }
+
+footer { text-align: center; padding: 40px; color: #444; font-size: 12px; }
+
+@media (max-width: 600px) {
+  .params { grid-template-columns: 1fr; }
+  .result-meta { grid-template-columns: 1fr 1fr; }
+  .btn-group { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<div class="header">
+  <h1>text2midi</h1>
+  <p>AI-powered MIDI music generation — describe any style, get a full arrangement</p>
+</div>
+
+<div class="card">
+  <textarea id="prompt" placeholder="Describe the music you want...&#10;Example: epic orchestral battle theme, heroic brass, rapid strings, triumphant Final Fantasy style&#10;Or: slow 70 BPM lo-fi, melancholic piano, warm vinyl crackle, simple drums"></textarea>
+
+  <div class="presets" id="presets">
+    <span class="preset-tag" data-prompt="epic orchestral battle theme, heroic brass, rapid strings, triumphant, Final Fantasy style">Epic Battle</span>
+    <span class="preset-tag" data-prompt="dark trap beat, heavy 808 bass sliding, crisp snare on beat 3, rapid hi-hat rolls, dark atmospheric melody">Trap</span>
+    <span class="preset-tag" data-prompt="薛之谦风格情歌, 忧郁钢琴 ballad, 温暖弦乐铺垫, 情感起伏, 慢板流行编曲">国风情歌</span>
+    <span class="preset-tag" data-prompt="AC/DC style hard rock, driving straight 4/4 beat, bluesy power chord riffs, loud energetic">Hard Rock</span>
+    <span class="preset-tag" data-prompt="uplifting pop song, four on the floor beat, catchy synth melody, bright major key, energetic chorus">Pop</span>
+  </div>
+
+  <div class="params">
+    <div class="param">
+      <label>Style</label>
+      <select id="style">
+        <option value="trap">Trap</option>
+        <option value="boomBap">Boom Bap</option>
+        <option value="drill">Drill</option>
+        <option value="lofi" selected>Lo-fi</option>
+        <option value="westCoast">West Coast</option>
+        <option value="jerseyClub">Jersey Club</option>
+      </select>
+    </div>
+    <div class="param">
+      <label>Swing</label>
+      <select id="swing">
+        <option value="straight">Straight</option>
+        <option value="mpc58" selected>MPC 58%</option>
+        <option value="mpc62">MPC 62%</option>
+        <option value="mpc64">MPC 64%</option>
+        <option value="triplet">Triplet</option>
+        <option value="shuffle55">Shuffle 55%</option>
+      </select>
+    </div>
+    <div class="param">
+      <label>BPM</label>
+      <input type="number" id="bpm" value="90" min="60" max="200">
+    </div>
+    <div class="param">
+      <label>Key</label>
+      <select id="key">
+        <option value="C major">C major</option>
+        <option value="A minor">A minor</option>
+        <option value="G major">G major</option>
+        <option value="E minor">E minor</option>
+        <option value="D major">D major</option>
+        <option value="D minor" selected>D minor</option>
+        <option value="C minor">C minor</option>
+      </select>
+    </div>
+    <div class="param">
+      <label>Bars</label>
+      <input type="number" id="bars" value="8" min="4" max="16">
+    </div>
+    <div class="param">
+      <label>Seed (0=random)</label>
+      <input type="number" id="seed" value="0" min="0" max="999">
+    </div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-primary" id="generateBtn" onclick="generate()">
+      <span id="btnText">✦ Generate MIDI</span>
+      <span id="btnSpinner" class="spinner" style="display:none"></span>
+    </button>
+    <button class="btn btn-secondary" onclick="resetForm()">Reset</button>
+  </div>
+  <div class="error-msg" id="errorMsg"></div>
+</div>
+
+<div class="card result" id="resultCard">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <h3 id="resultTitle" style="font-weight:600">Generated Track</h3>
+    <span id="resultFileId" style="font-size:12px;color:#666"></span>
+  </div>
+
+  <div class="result-meta" id="resultMeta"></div>
+
+  <audio id="audioPlayer" class="audioplayer" controls style="display:none"></audio>
+  <div id="midiInfo" style="font-size:13px;color:#888;text-align:center;padding:8px">MIDI file generated — download to play in your DAW</div>
+
+  <div style="margin-top:12px">
+    <button class="btn btn-primary" onclick="downloadMidi()" style="font-size:13px;padding:10px">⬇ Download MIDI</button>
+  </div>
+
+  <div class="tracks" id="trackList"></div>
+</div>
+
+</div>
+
+<footer>
+  text2midi — Go backend + LLM composer + MIDI renderer<br>
+  Prompt → Melody → Arrangement → MIDI
+</footer>
+
+<script>
+const API_URL = 'http://localhost:8080';
+let lastResult = null;
+
+function setPrompt(text) {
+  document.getElementById('prompt').value = text;
+  document.querySelectorAll('.preset-tag').forEach(t => t.classList.remove('active'));
+}
+
+document.querySelectorAll('.preset-tag').forEach(tag => {
+  tag.addEventListener('click', function() {
+    document.querySelectorAll('.preset-tag').forEach(t => t.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('prompt').value = this.dataset.prompt;
+  });
+});
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 5000);
+}
+
+async function generate() {
+  const prompt = document.getElementById('prompt').value.trim();
+  if (!prompt) { showError('Please describe the music you want'); return; }
+
+  const btn = document.getElementById('generateBtn');
+  const btnText = document.getElementById('btnText');
+  const spinner = document.getElementById('btnSpinner');
+  btn.disabled = true;
+  btnText.textContent = 'Generating...';
+  spinner.style.display = 'inline-block';
+
+  document.getElementById('resultCard').classList.remove('show');
+  document.getElementById('errorMsg').style.display = 'none';
+
+  const body = {
+    prompt: prompt,
+    style: document.getElementById('style').value,
+    bpm: parseInt(document.getElementById('bpm').value),
+    key: document.getElementById('key').value,
+    bars: parseInt(document.getElementById('bars').value),
+    tier: 'free'
+  };
+
+  const seed = parseInt(document.getElementById('seed').value);
+  if (seed > 0) body.seed = seed;
+
+  try {
+    // Use the backend server - for now, show info about using CLI
+    // The server needs to be running on port 8080
+    const resp = await fetch(API_URL + '/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error || 'Generation failed');
+    }
+
+    const data = await resp.json();
+    lastResult = data;
+    displayResult(data);
+
+  } catch (e) {
+    // Fallback: show CLI instructions
+    document.getElementById('resultCard').classList.add('show');
+    document.getElementById('resultTitle').textContent = 'Server Offline';
+    document.getElementById('resultMeta').innerHTML = `
+      <div class="meta-item" style="grid-column:1/-1;padding:20px">
+        <div style="font-size:14px;color:#888;margin-bottom:12px">
+          Backend server is not running. Use the CLI to generate:
+        </div>
+        <pre style="background:#0a0a0f;padding:16px;border-radius:8px;font-size:13px;text-align:left;overflow-x:auto;color:#a855f7">
+go run ./cmd/generate/ \\
+  --prompt "${prompt.substring(0,50)}..." \\
+  --style ${document.getElementById('style').value} \\
+  --bpm ${document.getElementById('bpm').value} \\
+  --key "${document.getElementById('key').value}" \\
+  --bars ${document.getElementById('bars').value} \\
+  --out ./midi_output</pre>
+      </div>`;
+    document.getElementById('trackList').innerHTML = '';
+  }
+
+  btn.disabled = false;
+  btnText.textContent = '✦ Generate MIDI';
+  spinner.style.display = 'none';
+}
+
+function displayResult(data) {
+  document.getElementById('resultCard').classList.add('show');
+  document.getElementById('resultTitle').textContent = data.fileName || 'Generated Track';
+  document.getElementById('resultFileId').textContent = 'ID: ' + (data.fileId || '');
+
+  const meta = data.meta || {};
+  document.getElementById('resultMeta').innerHTML = `
+    <div class="meta-item">
+      <div class="meta-value">${data.tracks || meta.total_tracks || '?'}</div>
+      <div class="meta-label">Tracks</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-value">${data.durationSeconds ? data.durationSeconds.toFixed(1) : '?'}</div>
+      <div class="meta-label">Seconds</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-value">${meta.total_note_events || '?'}</div>
+      <div class="meta-label">Notes</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-value">${data.fileSize ? (data.fileSize/1024).toFixed(1) : '?'}</div>
+      <div class="meta-label">KB</div>
+    </div>
+  `;
+
+  // Try to play MIDI if we have base64 data (not implemented in server yet)
+  const audioEl = document.getElementById('audioPlayer');
+  if (data.midiBase64) {
+    audioEl.src = 'data:audio/midi;base64,' + data.midiBase64;
+    audioEl.style.display = 'block';
+    document.getElementById('midiInfo').style.display = 'none';
+  } else {
+    audioEl.style.display = 'none';
+    document.getElementById('midiInfo').style.display = 'block';
+  }
+
+  // Track list
+  const trackList = document.getElementById('trackList');
+  trackList.innerHTML = '<div style="font-size:12px;color:#888;margin-bottom:8px">Tracks</div>';
+  if (meta.tracks) {
+    // Can't get individual track details from current API
+    for (let i = 0; i < data.tracks; i++) {
+      trackList.innerHTML += `<div class="track-row"><span class="track-name">Track ${i+1}</span><span class="track-notes">MIDI</span></div>`;
+    }
+  }
+}
+
+function downloadMidi() {
+  if (!lastResult) return;
+  // Use download endpoint
+  const fileId = lastResult.fileId;
+  if (fileId) {
+    window.open(API_URL + '/api/files/' + fileId, '_blank');
+  }
+}
+
+function resetForm() {
+  document.getElementById('prompt').value = '';
+  document.getElementById('style').value = 'lofi';
+  document.getElementById('bpm').value = '90';
+  document.getElementById('key').value = 'D minor';
+  document.getElementById('bars').value = '8';
+  document.getElementById('seed').value = '0';
+  document.getElementById('resultCard').classList.remove('show');
+  document.querySelectorAll('.preset-tag').forEach(t => t.classList.remove('active'));
+}
+</script>
+</body>
+</html>
