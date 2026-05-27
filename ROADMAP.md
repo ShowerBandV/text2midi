@@ -2,12 +2,28 @@
 
 ## Phase 1: DNA 系统打地基（当前）
 
-- [ ] MIDI → MusicDNA Extractor 完成
-  - [ ] StructureDNA（段落提取）
-  - [ ] HarmonyDNA（和弦检测）
-  - [ ] MotifDNA（动机提取 + 评分）
-  - [ ] RhythmDNA（节奏模式）
-  - [ ] TextureDNA（编曲层）
+### Structure Extractor（音乐分镜）
+- [ ] BarFeature 计算（density / energy / chord / instrument_count）
+- [ ] 变化点检测（energy / density / chord 阈值）
+- [ ] 段落聚类（similarity-based section grouping）
+- [ ] 模板匹配修正（AABA / ABAB / intro-verse-chorus）
+- [ ] 输出 StructureDNA
+
+### Motif Scoring System（旋律质量评估）
+- [ ] MotifScore { Repetition, Contour, Simplicity, RhythmIdentity }
+- [ ] Repetition 计算（occurrence / total bars）
+- [ ] Contour 计算（slope variance）
+- [ ] Simplicity 计算（avg interval size）
+- [ ] RhythmIdentity 计算（duration pattern similarity）
+- [ ] 总分 = repetition*0.4 + contour*0.2 + simplicity*0.2 + rhythm*0.2
+- [ ] 评分驱动生成（高分→多重复，低分→强变异）
+
+### MIDI → MusicDNA Extractor
+- [ ] StructureDNA（段落提取）
+- [ ] HarmonyDNA（和弦检测）
+- [ ] MotifDNA（动机提取 + 评分）
+- [ ] RhythmDNA（节奏模式）
+- [ ] TextureDNA（编曲层）
 - [ ] MIDI Cleaner（过滤噪音 MIDI）
 - [ ] MusicDNA Schema 固化
 
