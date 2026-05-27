@@ -9,6 +9,7 @@ import (
 
 	"github.com/ShowerBandV/text2midi/internal/agent"
 	"github.com/ShowerBandV/text2midi/internal/composer"
+	"github.com/ShowerBandV/text2midi/internal/musicdna"
 	"github.com/ShowerBandV/text2midi/internal/generator"
 	"github.com/ShowerBandV/text2midi/internal/mutation"
 	"github.com/ShowerBandV/text2midi/internal/llm"
@@ -282,6 +283,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Render: %v\n", err)
 		os.Exit(1)
 	}
+
+	// --- MusicDNA extraction ---
+	extractor := musicdna.NewExtractor()
+	dna := extractor.Extract(evMap, plan.TotalBars, plan.Key.Root+" "+plan.Key.Mode, fmt.Sprintf("%d", plan.BPM))
+	fmt.Println(dna.Print())
 
 	fmt.Printf("  MIDI written: %s\n", result.OutputPath)
 	fmt.Printf("  Tracks: %d | Notes: %d | Duration: %.1fs\n",
