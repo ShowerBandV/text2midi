@@ -64,7 +64,23 @@ func main() {
 			if l, ok := fvMap["lo_fi"]; ok { plan.FeatureVector.LoFi = toFloat(l) }
 		}
 	}
-	if *bpm > 0 {
+
+	// Extract mood for composer personality.
+	mood := "default"
+	if styles, ok := intentMap["style"]; ok {
+		if s, ok := styles.([]any); ok && len(s) > 0 {
+			if ms, ok := s[0].(string); ok {
+				mood = ms
+			}
+		}
+	}
+
+	// Pick composer personality.
+	composerDNA := composer.PickComposer(*styleName, *prompt, mood)
+	fmt.Printf("  Composer: %s", composerDNA.Name)
+
+	// Enable/disable post-processing based on DNA.
+		if *bpm > 0 {
 		plan.BPM = *bpm
 	}
 	if *bars > 0 {
