@@ -13,7 +13,7 @@ import (
 	"github.com/yourname/text2midi/internal/schema"
 )
 
-var rng = struct{ n int }{}
+
 
 // MelodyGrammar applies hard musical constraints to a raw melody.
 type MelodyGrammar struct {

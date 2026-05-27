@@ -175,6 +175,11 @@ func main() {
 		composer.ApplyAllTransitions(evMap, energies, barStarts, plan.BPM)
 	}
 
+	// --- Drum density: style+energy adaptive ---
+	if drums, ok := evMap["drums"]; ok {
+		evMap["drums"] = composer.AdjustDrumDensity(drums, plan.FeatureVector.Energy, plan.TotalBars, *styleName)
+	}
+
 	// --- Dynamic layering (instrument count by energy) ---
 	if plan.TotalBars > 4 {
 		sectionNames := []string{"intro", "verse", "chorus", "bridge", "outro"}

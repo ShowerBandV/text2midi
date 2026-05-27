@@ -9,6 +9,8 @@ import (
 	"github.com/yourname/text2midi/internal/schema"
 )
 
+var rng struct{ n int }
+
 // DynamicLayer defines which instruments play at a given energy threshold.
 type DynamicLayer struct {
 	EnergyThreshold float64
@@ -39,6 +41,63 @@ var DynamicLayers = []DynamicLayer{
 		Instruments:     []string{"all", "counter_melody", "texture"},
 		Description:     "All instruments + counter melody",
 	},
+}
+
+// AdjustDrumDensity removes hi-hat and snare hits based on energy.
+// Low energy = simpler drums (kick only). High energy = full pattern.
+func AdjustDrumDensity(events []schema.NoteEvent, energy float64, totalBars int, styleName string) []schema.NoteEvent {
+	if len(events) == 0 {
+		return events
+	}
+
+	// Metal always keeps full drums.
+	if containsIC(styleName, "metal") || containsIC(styleName, "heavy") {
+		return events
+	}
+
+	keepRatio := 0.3 + energy*0.7 // 0.3 at energy=0, 1.0 at energy=1.0
+
+	var result []schema.NoteEvent
+	for _, ev := range events {
+		// Always keep kick (pitch 36).
+		if ev.Pitch == 36 {
+			result = append(result, ev)
+			continue
+		}
+		// Snare (38), hihat (42,46): keep probabilistically.
+		if rng.n%100 < int(keepRatio*100) {
+			result = append(result, ev)
+		}
+		rng.n++
+	}
+	return result
+}
+
+func containsIC(s, substr string) bool {
+	if len(substr) > len(s) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		match := true
+		for j := 0; j < len(substr); j++ {
+			ca := s[i+j]
+			cb := substr[j]
+			if ca >= 'A' && ca <= 'Z' {
+				ca += 32
+			}
+			if cb >= 'A' && cb <= 'Z' {
+				cb += 32
+			}
+			if ca != cb {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
 }
 
 // GetActiveInstruments returns the instrument set for a given energy level.
