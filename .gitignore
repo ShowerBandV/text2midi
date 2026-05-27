@@ -19,6 +19,13 @@ venv/
 *.so
 *.dylib
 
+# Claude AI agent skills (not project code)
+backend/.claude/
+backend/_bmad/
+
+# Source PDFs (large files, keep generated .md only)
+music_wiki_raw/*.pdf
+
 # IDE
 .idea/
 .vscode/
