@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/yourname/text2midi/internal/agent"
@@ -118,6 +117,10 @@ func main() {
 		// Style-aware: metal=minimal processing, pop=full processing
 		isMetal := plan.FeatureVector.Darkness >= 0.7 && plan.FeatureVector.Energy > 0.8
 		isHighEnergy := isMetal || (plan.FeatureVector.Energy > 0.7 && plan.FeatureVector.RhythmicComplexity < 0.5 && plan.FeatureVector.Darkness > 0.3)
+
+		// Apply MelodyGrammar: scale mask, interval limiter, gravity, phrasing.
+		grammar := composer.NewMelodyGrammar(plan.Key.Root, plan.Key.Mode)
+		ln = grammar.ApplyAll(ln, plan.TotalBars)
 
 		if isHighEnergy {
 			// Metal: lead guitar = intro riff (bars 0-1) + solo (last 2 bars).
@@ -267,9 +270,7 @@ func main() {
 		Tracks: tracks,
 	}
 
-	// --- Stem export ---
-	composer.EnsureStemDir(outputPath)
-	composer.ExportStems(midiIR, filepath.Dir(outputPath), name, nil)
+	// --- Stem export disabled ---
 
 	result, err := midi.RenderMIDI(midiIR, outputPath, nil)
 	if err != nil {
