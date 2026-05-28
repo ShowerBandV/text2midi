@@ -242,7 +242,7 @@ export default function App() {
         {/* Loading overlay view block */}
         {isGenerating && (
           <div className="fixed inset-0 z-50 bg-[#0e0e0e]/90 backdrop-blur-md flex flex-col items-center justify-center p-lg">
-            <div className="max-w-md w-full flex flex-col items-center text-center gap-md">
+            <div className="w-full flex flex-col items-center text-center gap-md">
               <div className="relative flex items-center justify-center">
                 <div className="w-16 h-16 rounded-full border-4 border-dashed border-primary animate-spin" style={{ animationDuration: "3s" }} />
                 <Brain className="w-6 h-6 text-primary absolute animate-pulse" />
@@ -266,16 +266,16 @@ export default function App() {
               
               {/* Giant Display header and subtitle */}
               <div className="flex flex-col items-center text-center gap-lg mt-8 select-none">
-                <h1 className="font-display font-extrabold text-display-lg max-w-4xl tracking-tight text-white leading-tight">
+                <h1 className="font-display font-extrabold text-display-lg tracking-tight text-white leading-tight">
                   Turn Your Words into <span className="text-primary italic">MIDI Magic</span>
                 </h1>
-                <p className="text-on-surface-variant max-w-xl text-sm md:text-base leading-relaxed font-medium">
+                <p className="text-on-surface-variant text-sm md:text-base leading-relaxed font-medium">
                   The world's first professional AI engine designed to translate complex musical prompts into production-ready MIDI sequences. Orchestrate your imagination.
                 </p>
               </div>
 
               {/* Main Generation Card Overlay interface */}
-              <div className="max-w-4xl w-full mx-auto glass-panel p-lg rounded-2xl neon-glow">
+              <div className="w-full mx-auto glass-panel p-lg rounded-2xl neon-glow">
                 <div className="flex flex-col gap-md">
                   <div className="relative">
                     <textarea
@@ -327,7 +327,7 @@ export default function App() {
               </div>
 
               {/* Bento Grid layouts */}
-              <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-lg mt-xl select-none select-none">
+              <div className="mx-auto grid grid-cols-1 md:grid-cols-12 gap-lg mt-xl select-none select-none">
                 
                 {/* Feature 1: AI Composition */}
                 <div className="md:col-span-8 glass-panel p-xl rounded-xl group hover:border-primary/40 transition-all overflow-hidden relative border border-white/5">
@@ -338,7 +338,7 @@ export default function App() {
                     <h3 className="font-display font-extrabold text-headline-lg-mobile md:text-headline-lg text-white mb-sm">
                       Instant AI Composition
                     </h3>
-                    <p className="text-on-surface-variant max-w-lg text-xs md:text-sm leading-relaxed">
+                    <p className="text-on-surface-variant text-xs md:text-sm leading-relaxed">
                       Our neural network is trained on over 2 million hours of musical performance, capturing the nuances of phrasing, velocity, and timing that standard generators miss.
                     </p>
                   </div>
@@ -385,7 +385,7 @@ export default function App() {
                     <h3 className="font-display font-extrabold text-headline-lg-mobile md:text-headline-lg text-white mb-sm">
                       Professional Grade Engine
                     </h3>
-                    <p className="text-on-surface-variant max-w-sm text-xs md:text-sm leading-relaxed">
+                    <p className="text-on-surface-variant text-xs md:text-sm leading-relaxed">
                       Built for producers who demand precision. No generic patterns—just pure, generative inspiration mapped to your specific DAW requirements.
                     </p>
                   </div>
@@ -394,7 +394,7 @@ export default function App() {
 
               {/* Dynamic waveform laser footer banner */}
               <section className="flex flex-col items-center text-center mt-6">
-                <div className="w-full max-w-4xl h-24 mb-6">
+                <div className="w-full h-24 mb-6">
                   <svg fill="none" height="60" viewBox="0 0 1000 60" width="100%" xmlns="http://www.w3.org/2000/svg">
                     <path className="animated-wave" d="M0 30 Q250 0 500 30 T1000 30" stroke="url(#wave-gradient-1)" strokeWidth="2" />
                     <path className="animated-wave animate-delay-1" d="M0 30 Q250 60 500 30 T1000 30" stroke="url(#wave-gradient-2)" strokeWidth="2" style={{ animationDelay: "-1.5s" }} />
