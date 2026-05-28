@@ -254,7 +254,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
 
       <div className="flex flex-grow overflow-hidden">
         {/* Sidebar Controls panel */}
-        <aside className="w-72 bg-surface-container-lowest border-r border-white/10 overflow-y-auto p-lg flex flex-col gap-lg select-none">
+        <aside className="w-72 bg-surface-container-lowest border-r border-white/10 overflow-hidden p-lg flex flex-col gap-lg select-none">
           {/* Tone instrument matrix */}
           <div>
             <h3 className="text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold gap-1.5 flex items-center mb-sm">
@@ -368,7 +368,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
         {/* Piano Roll Area Grid */}
         <section className="flex-grow flex overflow-hidden relative bg-[#0a0a0a]">
           {/* Vertical C3-C5 Piano Keys Controller Column */}
-          <div ref={pianoKeysRef} className="w-16 bg-surface-container-low flex flex-col border-r border-white/10 overflow-hidden" id="piano-keys">
+          <div ref={pianoKeysRef} className="w-16 flex-1 bg-surface-container-low flex flex-col border-r border-white/10 overflow-hidden" id="piano-keys">
             {PIANO_ROWS.map((pitch) => (
               <div
                 key={pitch}
