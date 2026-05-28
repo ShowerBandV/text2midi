@@ -160,7 +160,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
     };
   }, [isPlaying, notes, tempo, instrument, globalVelocity]);
 
-  const togglePlay  const togglePlay = () => {
+  const togglePlay = () => {
     getAudioContext(); // Resume context if suspended
     setIsPlaying(!isPlaying);
   };
