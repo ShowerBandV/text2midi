@@ -213,21 +213,7 @@ func main() {
 		fmt.Printf("  Lead: %d LLM notes", len(ln))
 	}
 
-	// LLM also writes bass line (replace rule-based).
-	if bn, err := agent.GenerateMelodyNotes(client, "bass", plan.Key.Root, plan.Key.Scale,
-		styleDesc, fvJSON, cpJSON, plan.BPM, plan.TotalBars*4); err == nil && len(bn) > 0 {
-		evMap["bass"] = bn
-		fmt.Printf(", Bass: %d LLM notes\n", len(bn))
-	} else {
-		fmt.Println()
-	}
-
-	// LLM writes pad/chords (replace rule-based block chords).
-	if pn, err := agent.GenerateMelodyNotes(client, "pad", plan.Key.Root, plan.Key.Scale,
-		styleDesc, fvJSON, cpJSON, plan.BPM, plan.TotalBars*4); err == nil && len(pn) > 0 {
-		evMap["pad"] = pn
-		fmt.Printf("  Pad: %d LLM notes\n", len(pn))
-	}
+	fmt.Println()
 
 	// --- V2 Arranger (skip lead — LLM output is sacrosanct) ---
 	leadCopy := evMap["lead"] // save lead
