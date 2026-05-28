@@ -380,7 +380,7 @@ export default function PianoRoll({
           </div>
 
           {/* Playhead & Grid scroll container */}
-          <div className="flex-grow overflow-auto relative piano-grid min-h-0 min-w-0" id="piano-roll-canvas">
+          <div className="flex-grow overflow-auto relative piano-grid min-h-0" id="piano-roll-canvas">
             
             {/* Playhead Line Indicator Component */}
             <div
