@@ -83,7 +83,7 @@ const handleKeysScroll = () => {
 
 const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
   const ROW_HEIGHT = 40; // pixels per piano key note
-  const TOTAL_BEATS = 16; // 4 bars * 4 beats
+  const TOTAL_BEATS = 32; // 8 bars * 4 beats
   const GRID_COLUMNS = TOTAL_BEATS * 2; // half-beat grid snap steps
 
   // Lazy initialize AudioContext on user click to prevent browser constraints
