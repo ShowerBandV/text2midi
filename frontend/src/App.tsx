@@ -224,7 +224,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#121212] flex flex-col font-sans text-on-background Selection:bg-primary-container Selection:text-on-primary-container">
+    <div className="h-screen bg-[#121212] flex flex-col font-sans text-on-background overflow-hidden Selection:bg-primary-container Selection:text-on-primary-container">
       {/* Dynamic atmospheric glowing canvas nodes */}
       <div className="absolute inset-x-0 top-0 h-[600px] hero-gradient pointer-events-none -z-10" />
       <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-primary/8 blur-[130px] rounded-full -z-10 pointer-events-none" />
@@ -234,7 +234,7 @@ export default function App() {
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {/* Main Container screen sections */}
-      <main className="flex-grow pt-28">
+      <main className="flex-1 pt-28 overflow-hidden">
         {/* Loading overlay view block */}
         {isGenerating && (
           <div className="fixed inset-0 z-50 bg-[#0e0e0e]/90 backdrop-blur-md flex flex-col items-center justify-center p-lg">
@@ -418,7 +418,7 @@ export default function App() {
           )}
 
           {activeTab === "editor" && (
-            <div className="fixed inset-x-0 top-28 bottom-0 border-0 rounded-none overflow-hidden glass-panel flex flex-col shadow-2xl">
+            <div className="h-full border border-white/10 rounded-2xl overflow-hidden glass-panel flex flex-col shadow-2xl">
               <PianoRoll
                 notes={notes}
                 setNotes={setNotes}
