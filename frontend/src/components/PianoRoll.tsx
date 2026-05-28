@@ -50,12 +50,21 @@ export default function PianoRoll({
   const [zoomLevel, setZoomLevel] = useState(1); // multiplier for beat columns widths
 
   const audioCtxRef = useRef<AudioContext | null>(null);
+const pianoKeysRef = useRef<HTMLDivElement | null>(null);
+const pianoCanvasRef = useRef<HTMLDivElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const pausedOffsetRef = useRef<number>(0);
   const triggeredNotesRef = useRef<Set<string>>(new Set());
 
-  const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
+  // Sync piano keys vertical scrolling with grid canvas
+const handleGridScroll = () => {
+  if (pianoKeysRef.current && pianoCanvasRef.current) {
+    pianoKeysRef.current.scrollTop = pianoCanvasRef.current.scrollTop;
+  }
+};
+
+const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
   const ROW_HEIGHT = 40; // pixels per piano key note
   const TOTAL_BEATS = 16; // 4 bars * 4 beats
   const GRID_COLUMNS = TOTAL_BEATS * 2; // half-beat grid snap steps
@@ -359,7 +368,7 @@ export default function PianoRoll({
         {/* Piano Roll Area Grid */}
         <section className="flex-grow flex overflow-hidden relative bg-[#0a0a0a]">
           {/* Vertical C3-C5 Piano Keys Controller Column */}
-          <div className="w-16 bg-surface-container-low flex flex-col border-r border-white/10 overflow-y-scroll" id="piano-keys" style={{ scrollbarWidth: "none" }}>
+          <div ref={pianoKeysRef} className="w-16 bg-surface-container-low flex flex-col border-r border-white/10 overflow-hidden" id="piano-keys">
             {PIANO_ROWS.map((pitch) => (
               <div
                 key={pitch}
@@ -380,7 +389,7 @@ export default function PianoRoll({
           </div>
 
           {/* Playhead & Grid scroll container */}
-          <div className="flex-grow overflow-auto relative piano-grid min-h-0" id="piano-roll-canvas">
+          <div ref={pianoCanvasRef} onScroll={handleGridScroll} className="flex-grow overflow-auto relative piano-grid min-h-0" id="piano-roll-canvas">
             
             {/* Playhead Line Indicator Component */}
             <div
