@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
 // ─── MusicDNA Serialization ───────────────────────────────────────
@@ -115,6 +117,38 @@ func (lib *Library) Delete(name string) error {
 		return fmt.Errorf("delete template %q: %w", name, err)
 	}
 	return nil
+}
+
+// SaveToDir saves the MusicDNA as dna.json alongside a generated MIDI file.
+// dirPath should be the output directory (e.g. "./generated/file_id/").
+func (d *MusicDNA) SaveToDir(dirPath string) error {
+	data, err := d.ToJSON()
+	if err != nil {
+		return fmt.Errorf("marshal dna: %w", err)
+	}
+	path := filepath.Join(dirPath, "dna.json")
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("write dna.json: %w", err)
+	}
+	return nil
+}
+
+// SaveDNAIfValid extracts DNA from events and saves it alongside the MIDI.
+// Returns the DNA if it meets quality threshold, nil otherwise.
+func SaveDNAIfValid(eventsByTrack map[string][]schema.NoteEvent, totalBars int, key, outputDir string) *MusicDNA {
+	ext := NewExtractor()
+	dna := ext.Extract(eventsByTrack, totalBars, key)
+	quality := ScoreTemplate(dna)
+	if quality < 0.2 {
+		return nil // too low quality, skip
+	}
+	if err := dna.SaveToDir(outputDir); err != nil {
+		fmt.Printf("[DNA] Warning: failed to save DNA: %v\n", err)
+		return dna
+	}
+	fmt.Printf("[DNA] Saved (quality=%.2f, sections=%d, chords=%d, motif_conf=%.2f)\n",
+		quality, len(dna.Structure.Sections), len(dna.Harmony.Progression), dna.Motif.Confidence)
+	return dna
 }
 
 // ─── Quality Scoring for DNA Library ──────────────────────────────

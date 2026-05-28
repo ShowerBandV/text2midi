@@ -24,6 +24,7 @@ import (
 
 	"github.com/ShowerBandV/text2midi/internal/agent"
 	"github.com/ShowerBandV/text2midi/internal/llm"
+	"github.com/ShowerBandV/text2midi/internal/musicdna"
 	"github.com/ShowerBandV/text2midi/internal/midi"
 	"github.com/ShowerBandV/text2midi/internal/schema"
 	"github.com/ShowerBandV/text2midi/internal/store"
@@ -322,6 +323,11 @@ func (s *Server) generate(req GenerateRequest) (*GenerateResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("save: %w", err)
 	}
+
+	// Extract and save MusicDNA.
+	saveDir := filepath.Join(s.outputDir, record.ID)
+	musicdna.SaveDNAIfValid(eventsByTrack, plan.TotalBars,
+		fmt.Sprintf("%s %s", plan.Key.Root, plan.Key.Mode), saveDir)
 
 	return &GenerateResponse{
 		Success:  true,

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 
+	"github.com/ShowerBandV/text2midi/internal/musicdna"
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
@@ -270,4 +271,73 @@ func containsIgnoreCase(s, substr string) bool {
 // Roll returns true with probability p.
 func Roll(rng *rand.Rand, p float64) bool {
 	return rng.Float64() < p
+}
+
+// DNAFromMusicDNA maps extracted MusicDNA onto a ComposerDNA personality.
+// This bridges Phase 1 (extraction) with Phase 3 (DNA-driven generation).
+// The returned ComposerDNA adapts based on the analysis of a reference piece.
+func DNAFromMusicDNA(dna *musicdna.MusicDNA) ComposerDNA {
+	cd := ComposerDNA{
+		Name: "DNA-Adapted",
+	}
+
+	if dna == nil {
+		return cd
+	}
+
+	// Motif obsession: use motif score's repetition.
+	if dna.Motif.Score != nil {
+		cd.MotifObsession = dna.Motif.Score.Repetition
+		cd.RepetitionTolerance = (dna.Motif.Score.Repetition + dna.Motif.Score.RhythmIdentity) / 2.0
+	} else {
+		cd.MotifObsession = 0.5
+		cd.RepetitionTolerance = 0.5
+	}
+
+	// Chaos / syncopation from rhythm DNA.
+	cd.SyncopationBias = dna.Rhythm.Syncopation
+	cd.Chaos = 1.0 - dna.Rhythm.SwingAmount // less swing = more chaos room
+
+	// Register jumps from motif contour (high contour = more jumping).
+	if dna.Motif.Score != nil {
+		cd.RegisterJumpBias = dna.Motif.Score.Contour
+	}
+
+	// Harmonic aggression from tension.
+	cd.HarmonicAggression = dna.Dynamics.DynamicRange
+
+	// Silence from texture density (sparse = more silence).
+	cd.SilenceTolerance = 1.0 - dna.Texture.Density
+
+	// Voice crossing: allow when texture is dense.
+	cd.AllowVoiceCrossing = dna.Texture.Density > 0.5
+	cd.AllowParallelFifth = dna.Texture.Density > 0.6
+
+	return cd
+}
+
+// LoadDNAFromLibrary loads the highest-quality DNA template for a given style
+// from the library and maps it to a ComposerDNA.
+func LoadDNAFromLibrary(libDir, style string) *ComposerDNA {
+	lib := musicdna.NewLibrary(libDir)
+	templates, err := lib.List(style)
+	if err != nil || len(templates) == 0 {
+		// No style filter: try any template.
+		templates, err = lib.List("")
+		if err != nil || len(templates) == 0 {
+			return nil
+		}
+	}
+
+	// Find the highest quality template.
+	best := templates[0]
+	for _, t := range templates[1:] {
+		if t.Quality > best.Quality {
+			best = t
+		}
+	}
+
+	cd := DNAFromMusicDNA(&best.DNA)
+	cd.Name = best.Name
+	return &cd
 }
