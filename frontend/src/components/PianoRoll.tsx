@@ -213,7 +213,7 @@ export default function PianoRoll({
           <div className="flex items-center gap-md">
             {/* Realtime Tempo Knob input */}
             <div className="flex flex-col select-none">
-              <span className="font-mono text-[9px] text-on-surface-variant uppercase tracking-widest font-semibold">Tempo</span>
+              <span className="text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold">Tempo</span>
               <div className="flex items-center gap-1">
                 <input
                   type="number"
@@ -223,14 +223,14 @@ export default function PianoRoll({
                   onChange={(e) => setTempo(Math.max(50, Math.min(240, parseInt(e.target.value) || 120)))}
                   className="bg-transparent border-none text-center font-bold text-headline-lg-mobile text-primary focus:ring-0 p-0 w-14 font-mono focus:outline-none"
                 />
-                <span className="font-mono text-[10px] text-on-surface-variant">BPM</span>
+                <span className="text-[10px] text-on-surface-variant">BPM</span>
               </div>
             </div>
             <div className="h-8 w-[1px] bg-white/10 mx-1" />
             
             {/* Time signature label */}
             <div className="flex flex-col select-none">
-              <span className="font-mono text-[9px] text-on-surface-variant uppercase tracking-widest font-semibold">Time Sig</span>
+              <span className="text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold">Time Sig</span>
               <div className="flex items-center">
                 <span className="text-headline-lg-mobile font-mono font-bold text-primary">4/4</span>
               </div>
@@ -248,7 +248,7 @@ export default function PianoRoll({
         <aside className="w-72 bg-surface-container-lowest border-r border-white/10 overflow-y-auto p-lg flex flex-col gap-lg select-none">
           {/* Tone instrument matrix */}
           <div>
-            <h3 className="font-mono text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold gap-1.5 flex items-center mb-sm">
+            <h3 className="text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold gap-1.5 flex items-center mb-sm">
               <span>Instrument</span>
             </h3>
             <div className="flex flex-col gap-sm">
@@ -281,7 +281,7 @@ export default function PianoRoll({
 
           {/* Scale Setup card overlay */}
           <div className="glass-panel p-md rounded-xl border border-white/5 flex flex-col gap-md">
-            <h3 className="font-mono text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold flex items-center gap-1.5">
+            <h3 className="text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold flex items-center gap-1.5">
               <Scale className="w-3.5 h-3.5" />
               <span>Key & Scale Selection</span>
             </h3>
@@ -317,11 +317,11 @@ export default function PianoRoll({
           {/* Core Velocity Tracker Slider */}
           <div>
             <div className="flex justify-between items-center mb-2">
-              <h3 className="font-mono text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold flex items-center gap-1.5">
+              <h3 className="text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold flex items-center gap-1.5">
                 <Volume2 className="w-3.5 h-3.5" />
                 <span>Global Velocity</span>
               </h3>
-              <span className="font-mono text-xs text-secondary font-bold">{globalVelocity}</span>
+              <span className="text-xs text-secondary font-bold">{globalVelocity}</span>
             </div>
             <input
               type="range"
@@ -349,7 +349,7 @@ export default function PianoRoll({
               <div className="w-2.5 bg-secondary/60 rounded-t-full transition-all duration-300" style={{ height: isPlaying ? "60%" : "6%" }} />
               <div className="absolute inset-0 bg-gradient-to-t from-surface-container via-transparent to-transparent pointer-events-none" />
             </div>
-            <span className="text-center font-mono text-[9px] text-on-surface-variant uppercase tracking-widest font-semibold mt-1 flex items-center justify-center gap-1">
+            <span className="text-center text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold mt-1 flex items-center justify-center gap-1">
               <Waves className="w-3 h-3 text-secondary" />
               Real-time Spectrum
             </span>

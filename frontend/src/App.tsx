@@ -251,7 +251,7 @@ export default function App() {
                 <h3 className="font-display font-extrabold text-headline-lg-mobile text-white uppercase tracking-wider">
                   MidiMind Orchestrator
                 </h3>
-                <p className="font-mono text-xs text-secondary animate-pulse">
+                <p className="text-xs text-secondary animate-pulse">
                   {loadingMessages[generationStep]}
                 </p>
               </div>
@@ -462,11 +462,11 @@ export default function App() {
             <div className="font-display font-extrabold text-base bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
               MidiMind AI
             </div>
-            <p className="font-mono text-[10px] text-on-surface-variant opacity-80">
+            <p className="text-[10px] text-on-surface-variant opacity-80">
               © 2026 MidiMind AI. All rights reserved.
             </p>
           </div>
-          <div className="flex flex-wrap justify-center gap-lg font-mono text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
+          <div className="flex flex-wrap justify-center gap-lg text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
             <a className="hover:text-primary transition-colors" href="#terms">Terms</a>
             <a className="hover:text-primary transition-colors" href="#privacy">Privacy</a>
             <a className="hover:text-primary transition-colors" href="#api">API docs</a>

@@ -164,7 +164,7 @@ export default function Library({
             <div className="w-full md:w-64 h-84 bg-surface-container-high rounded-xl p-md border border-white/10 shadow-2xl flex flex-col transform transition-transform duration-500 group-hover:rotate-1">
               <div className="flex-1 rounded p-md flex flex-col justify-between border border-white/5 bg-black/55 relative overflow-hidden">
                 <div className="flex justify-between items-start">
-                  <span className="font-mono text-[9px] text-secondary font-bold tracking-widest bg-secondary/10 px-2 py-0.5 rounded-full">A-SIDE</span>
+                  <span className="text-[10px] text-secondary font-bold tracking-widest bg-secondary/10 px-2 py-0.5 rounded-full">A-SIDE</span>
                   <Disc2 className={`w-5 h-5 text-primary ${isPlaying ? "animate-spin" : ""}`} style={{ animationDuration: "1.5s" }} />
                 </div>
                 
@@ -173,7 +173,7 @@ export default function Library({
                   <h2 className="font-display font-extrabold text-headline-lg-mobile text-primary leading-tight truncate">
                     {activeTrack.metadata.title}
                   </h2>
-                  <p className="font-mono text-[9px] text-on-surface-variant tracking-wider uppercase font-medium">
+                  <p className="text-[10px] text-on-surface-variant tracking-wider uppercase font-medium">
                     SEED: {activeTrack.metadata.seed}
                   </p>
                 </div>
@@ -203,11 +203,11 @@ export default function Library({
             {/* List key metadata blocks */}
             <div className="flex-1 flex flex-col gap-md w-full">
               <div className="space-y-sm">
-                <span className="font-mono text-[10px] text-secondary uppercase tracking-widest font-bold">Sequence Metadata</span>
+                <span className="text-[10px] text-secondary uppercase tracking-widest font-bold">Sequence Metadata</span>
                 
                 <div className="grid grid-cols-2 gap-md">
                   <div className="bg-white/5 p-md rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
-                    <p className="font-mono text-[10px] text-on-surface-variant uppercase flex items-center gap-1">
+                    <p className="text-[10px] text-on-surface-variant uppercase flex items-center gap-1">
                       <Clock className="w-3 h-3 text-secondary" /> Duration
                     </p>
                     <p className="font-display font-extrabold text-headline-lg-mobile text-on-surface">
@@ -215,7 +215,7 @@ export default function Library({
                     </p>
                   </div>
                   <div className="bg-white/5 p-md rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
-                    <p className="font-mono text-[10px] text-on-surface-variant uppercase flex items-center gap-1">
+                    <p className="text-[10px] text-on-surface-variant uppercase flex items-center gap-1">
                       <Music className="w-3 h-3 text-primary" /> Key
                     </p>
                     <p className="font-display font-extrabold text-headline-lg-mobile text-on-surface">
@@ -223,7 +223,7 @@ export default function Library({
                     </p>
                   </div>
                   <div className="bg-white/5 p-md rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
-                    <p className="font-mono text-[10px] text-on-surface-variant uppercase flex items-center gap-1">
+                    <p className="text-[10px] text-on-surface-variant uppercase flex items-center gap-1">
                       <Gauge className="w-3 h-3 text-primary" /> Tempo
                     </p>
                     <p className="font-display font-extrabold text-headline-lg-mobile text-on-surface font-mono">
@@ -231,7 +231,7 @@ export default function Library({
                     </p>
                   </div>
                   <div className="bg-white/5 p-md rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
-                    <p className="font-mono text-[10px] text-on-surface-variant uppercase flex items-center gap-1">
+                    <p className="text-[10px] text-on-surface-variant uppercase flex items-center gap-1">
                       <Sliders className="w-3 h-3 text-secondary" /> Complexity
                     </p>
                     <p className="font-display font-extrabold text-headline-lg-mobile text-on-surface">
@@ -243,10 +243,10 @@ export default function Library({
 
               {/* Pill Badge tags */}
               <div className="flex flex-wrap gap-2 items-center mt-sm">
-                <div className="px-md py-1 bg-primary/15 rounded-full border border-primary/30 text-primary font-mono text-xs font-semibold">
+                <div className="px-md py-1 bg-primary/15 rounded-full border border-primary/30 text-primary text-xs font-semibold">
                   {activeTrack.metadata.genre || "Cybernetic Jazz"}
                 </div>
-                <div className="px-md py-1 bg-secondary/15 rounded-full border border-secondary/30 text-secondary font-mono text-xs font-semibold">
+                <div className="px-md py-1 bg-secondary/15 rounded-full border border-secondary/30 text-secondary text-xs font-semibold">
                   Polyphonic
                 </div>
               </div>
@@ -284,7 +284,7 @@ export default function Library({
             className="group flex items-center justify-between bg-gradient-to-r from-primary to-secondary p-lg rounded-xl transition-all hover:scale-[1.02] active:scale-95 shadow-xl select-none cursor-pointer text-black"
           >
             <div className="flex flex-col items-start text-left">
-              <span className="font-mono text-[9px] text-black/70 font-extrabold uppercase">Primary action</span>
+              <span className="text-[10px] text-black/70 font-extrabold uppercase">Primary action</span>
               <span className="font-display font-extrabold text-headline-lg-mobile">Download .mid</span>
             </div>
             <Download className="w-8 h-8 group-hover:translate-y-1 transition-transform" />
@@ -298,7 +298,7 @@ export default function Library({
               </div>
               <div className="flex-grow select-none">
                 <p className="font-bold text-sm text-on-surface">Export to WAV</p>
-                <p className="font-mono text-[9px] text-on-surface-variant">High fildelity lossless offline wav render</p>
+                <p className="text-[10px] text-on-surface-variant">High fildelity lossless offline wav render</p>
               </div>
             </button>
 
@@ -308,7 +308,7 @@ export default function Library({
               </div>
               <div className="flex-grow select-none">
                 <p className="font-bold text-sm text-on-surface">Save Archive</p>
-                <p className="font-mono text-[9px] text-on-surface-variant">Store permanently within local MIDI library</p>
+                <p className="text-[10px] text-on-surface-variant">Store permanently within local MIDI library</p>
               </div>
             </button>
           </div>
@@ -317,7 +317,7 @@ export default function Library({
         {/* Share Creation Box */}
         <div className="glass-panel rounded-xl p-lg border border-white/5 shadow-2xl flex flex-col gap-sm">
           <div className="flex items-center justify-between mb-sm">
-            <span className="font-mono text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Share creation</span>
+            <span className="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Share creation</span>
             
             <div className="flex gap-2">
               <button 
@@ -371,11 +371,11 @@ export default function Library({
               </button>
               <div className="text-left select-none">
                 <h4 className="font-bold text-sm text-white">Preview AI Symphony</h4>
-                <p className="font-mono text-[9px] text-on-surface-variant uppercase tracking-wider">Low-latency physical sound render</p>
+                <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">Low-latency physical sound render</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-md font-mono text-[10px] text-on-surface-variant font-bold select-none">
+            <div className="flex items-center gap-md text-[10px] text-on-surface-variant font-bold select-none">
               <span>{currentTimeStr} / 00:16</span>
               <div className="w-32 h-1 bg-white/10 rounded-full overflow-hidden">
                 <div 
