@@ -189,6 +189,18 @@ func main() {
 		plan.FeatureVector.RhythmicComplexity, plan.FeatureVector.Tension)
 	fmt.Printf("  SongComposer: %d tracks", len(evMap))
 
+	cpJSON := agent.ChordProgressionToJSON(plan.ChordProgression)
+	// --- LLM Lead Melody ---
+	styleDesc := fmt.Sprintf("{style:%%s}", *styleName)
+	fvJSON := fmt.Sprintf("{dark:%.1f,en:%.1f,ten:%.1f,rhy:%.1f}",
+		plan.FeatureVector.Darkness, plan.FeatureVector.Energy,
+		plan.FeatureVector.Tension, plan.FeatureVector.RhythmicComplexity)
+	if ln, err := agent.GenerateMelodyNotes(client, "lead", plan.Key.Root, plan.Key.Scale,
+		styleDesc, fvJSON, cpJSON, plan.BPM, plan.TotalBars*4); err == nil && len(ln) > 0 {
+		evMap["lead"] = ln
+		fmt.Printf("  Lead: %d LLM notes", len(ln))
+	}
+
 	// --- V2 Arranger ---
 	conflicts := arranger.CheckArrangement(evMap, plan.TotalBars)
 	if len(conflicts) > 0 {
