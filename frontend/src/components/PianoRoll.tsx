@@ -243,7 +243,7 @@ export default function PianoRoll({
         </div>
       </div>
 
-      <div className="flex flex-grow overflow-auto">
+      <div className="flex flex-grow overflow-hidden">
         {/* Sidebar Controls panel */}
         <aside className="w-72 bg-surface-container-lowest border-r border-white/10 overflow-y-auto p-lg flex flex-col gap-lg select-none">
           {/* Tone instrument matrix */}
