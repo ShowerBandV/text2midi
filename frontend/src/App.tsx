@@ -234,7 +234,7 @@ export default function App() {
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {/* Main Container screen sections */}
-      <main className="flex-1 pt-28 overflow-hidden">
+      <main className="flex-1 pt-16 overflow-hidden">
         {/* Loading overlay view block */}
         {isGenerating && (
           <div className="fixed inset-0 z-50 bg-[#0e0e0e]/90 backdrop-blur-md flex flex-col items-center justify-center p-lg">
