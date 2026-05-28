@@ -36,26 +36,23 @@ go test ./...
 ```
 用户文本 (Prompt)
    ↓
-LLM Agent (2 次调用)
-   ├── ParseIntent → 风格/情绪/特征向量
-   └── PlanSong    → 和弦/调性/BPM
+LLM Agent (3 次调用)
+   ├── ParseIntent       → 风格/情绪/特征向量
+   ├── PlanSong          → 和弦/调性/BPM
+   └── GenerateMelody    → LLM 直接写主旋律 (不经过 Go 引擎)
    ↓
-V2 作曲引擎 (Go 规则引擎, 0 LLM 调用)
+作曲引擎 (Go 规则引擎)
    ├── Planner     → 结构化 SongPlan（段落/能量/配器/tempo/拍号）
-   ├── Motif Engine  → 动机变奏 + 主题记忆
-   ├── Phrase      → 4-bar 乐句展开（风格感知句式）
-   ├── Composer    → 多轨编曲（bass/drums/lead/pad/fx）
-   ├── Arranger    → 编曲协调（音区冲突/密度控制）
-   ├── Critic      → 质量评估（5 维评分 + 自动修复）
+   ├── Composer    → 多轨编曲（bass/drums/pad/fx — 不含 lead）
+   ├── Arranger    → 编曲协调（skip lead 音轨）
+   ├── Critic      → 质量评估（skip lead 音轨）
    ├── Humanizer   → 人性化（velocity/timing drift）
    └── MusicDNA    → 结构化分析报告
    ↓
-Post-processing
-   ├── MelodyGrammar   → 调性/音程约束
+Post-processing (仅对伴奏轨)
    ├── Transition Engine → 段落过渡
    ├── Dynamic Layering  → 乐器数量控制
-   ├── Texture Layer     → 氛围铺底
-   └── Creative Chaos    → 故意犯错
+   └── Texture Layer     → 氛围铺底
    ↓
 MIDI → .mid 文件 + MusicDNA 分析
 ```

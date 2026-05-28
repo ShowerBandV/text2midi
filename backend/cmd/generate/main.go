@@ -201,17 +201,20 @@ func main() {
 		fmt.Printf("  Lead: %d LLM notes", len(ln))
 	}
 
-	// --- V2 Arranger ---
+	// --- V2 Arranger (skip lead — LLM output is sacrosanct) ---
+	leadCopy := evMap["lead"] // save lead
 	conflicts := arranger.CheckArrangement(evMap, plan.TotalBars)
 	if len(conflicts) > 0 {
 		arranger.ResolveConflicts(conflicts, evMap)
 	}
+	evMap["lead"] = leadCopy // restore lead unmodified
 
-	// --- V2 Critic ---
+	// --- V2 Critic (skip lead) ---
 	musicScore := critic.Evaluate(evMap, plan.TotalBars)
 	if repaired, regen := critic.Repair(evMap, musicScore, plan.TotalBars, plan.BPM); repaired || regen {
 		fmt.Printf("  Critic: repaired=%t regen=%t score=%.2f\n", repaired, regen, musicScore.Total)
 	}
+	evMap["lead"] = leadCopy // restore lead unmodified
 
 	agent.GenerateChordPad(plan, evMap)
 
