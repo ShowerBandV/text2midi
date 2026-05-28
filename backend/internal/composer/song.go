@@ -278,6 +278,58 @@ func chordRootMIDI(chord string, octave int) int {
 	return 36 // fallback C2
 }
 
+// GenerateChordsMidra is a Go port of Midra's generate_chords().
+// Alternates between block and arpeggiated patterns, random durations, random velocities.
+func GenerateChordsMidra(chords []string, totalBars int) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(42))
+	motifLen := 8
+	motif := make([]int, motifLen)
+	for i := range motif {
+		motif[i] = rng.Intn(7)
+	}
+	motif[0] = 0
+	motif[motifLen-1] = []int{0, 2, 4}[rng.Intn(3)]
+
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		chord := chords[bar%len(chords)]
+		baseOctave := 2
+		if m := motif[bar%motifLen]; m >= 3 {
+			baseOctave = 3
+		}
+		notes := chordPitchesForChord(chord, baseOctave)
+		base := float64(bar) * 4.0
+		patternType := "block"
+		if m := motif[bar%motifLen]; !(m == 0 || m == 3 || m == 6) {
+			patternType = "arp"
+		}
+
+		for _, p := range notes {
+			if patternType == "block" {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p,
+					StartBeat:    base,
+					DurationBeat: []float64{2.0, 3.0, 4.0}[rng.Intn(3)],
+					Velocity:     54 + rng.Intn(25), // 54-78
+				})
+			} else {
+				step := 0.0
+				for step < 4.0 {
+					events = append(events, schema.NoteEvent{
+						Type: "note", Pitch: p,
+						StartBeat:    base + step,
+						DurationBeat: []float64{0.25, 0.5, 0.75}[rng.Intn(3)],
+						Velocity:     52 + rng.Intn(23), // 52-74
+					})
+					step += 1.0
+				}
+			}
+		}
+	}
+	fmt.Printf("[MidraChords] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
 // Original GenerateBass kept for compatibility.
 func GenerateBass(chords []string, timeline *Timeline, darkness, energy, rhythmic, tension float64) []schema.NoteEvent {
 	var events []schema.NoteEvent

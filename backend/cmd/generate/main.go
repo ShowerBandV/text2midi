@@ -201,6 +201,12 @@ func main() {
 	fmt.Printf("  SongComposer: %d tracks\n", len(evMap))
 
 	// --- Midra-style lead generation (scale-degree motif, 65% stepwise, random velocity/duation) ---
+	// Midra-style pad/chords (block vs arp alternation, random timing/velocity).
+	pn := composer.GenerateChordsMidra(chordStrs, plan.TotalBars)
+	if len(pn) > 0 {
+		evMap["pad"] = pn
+	}
+
 	// Midra-style bass (chord-root based, octave shifts, random duration/velocity).
 	bn := composer.GenerateBassMidra(chordStrs, plan.TotalBars)
 	if len(bn) > 0 {
