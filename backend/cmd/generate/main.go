@@ -158,12 +158,27 @@ func main() {
 		basePitch = 65
 	}
 
+	motif := []int{0, 2, 4, 3, 0} // fallback
+	// --- MusicDNA Template Lookup ---
+	templateLib := musicdna.NewTemplateDB("./templates")
+	if templates, err := templateLib.FindByStyle(*styleName); err == nil && len(templates) > 0 {
+		for _, t := range templates {
+			if len(t.DNA.Motif.Pattern) > 1 {
+				motif = t.DNA.Motif.Pattern
+				fmt.Printf("  Template: %s motif=%v", t.Name, motif)
+				break
+			}
+		}
+	}
+
 	// Style-aware motif derived from feature vector.
 	// High energy + high rhythmic → aggressive intervals (fourths, fifths).
 	// Low energy + high lofi → stepwise motion, narrow range.
 	// High tension → augmented/diminished intervals.
 	fv := plan.FeatureVector
-	motif := styleAwareMotif(fv.Darkness, fv.Energy, fv.Tension, fv.RhythmicComplexity, plan.Key.Mode)
+	if len(motif) < 2 {
+		motif = styleAwareMotif(fv.Darkness, fv.Energy, fv.Tension, fv.RhythmicComplexity, plan.Key.Mode)
+	}
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	_ = rng
@@ -260,10 +275,6 @@ func main() {
 
 	// --- MusicDNA extraction ---
 	extractor := musicdna.NewExtractor()
-	// --- MusicDNA Template Library ---
-	templateLib := musicdna.NewTemplateDB("./templates")
-	templateLib.FromMIDI(evMap, plan.TotalBars, plan.Key.Root+" "+plan.Key.Mode,
-		*styleName, plan.Title, *prompt)
 	dna := extractor.Extract(evMap, plan.TotalBars, plan.Key.Root+" "+plan.Key.Mode)
 	fmt.Println(dna.Print())
 

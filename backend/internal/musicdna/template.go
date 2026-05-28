@@ -173,10 +173,13 @@ func (lib *TemplateDB) FromMIDI(eventsByTrack map[string][]schema.NoteEvent, tot
 }
 
 func sanitize(s string) string {
-	s = strings.ToLower(s)
+	// Keep Unicode letters (including Chinese), digits, underscores, hyphens
 	s = strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r > 127 {
 			return r
+		}
+		if r >= 'A' && r <= 'Z' {
+			return r + 32 // to lower
 		}
 		return '_'
 	}, s)
