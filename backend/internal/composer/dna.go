@@ -111,7 +111,7 @@ func NewSongMemory() *SongMemory {
 	}
 }
 
-// RecordSection stores what happened in a section.
+// RecordSection stores what happened in a section, including which motif variant was used.
 func (sm *SongMemory) RecordSection(name string, startBar int, energy float64, activeInsts []string) {
 	sm.Sections = append(sm.Sections, SectionMemory{
 		Name:        name,
