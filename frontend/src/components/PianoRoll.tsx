@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { MidiNote, InstrumentType, PlaybackState } from "../types";
 import { playNote } from "../utils/audio";
-import { Play, Pause, RotateCcw, Plus, Minus, CheckCircle, Scale, Volume2, Waves } from "lucide-react";
+import { Play, Pause, RotateCcw, Plus, Minus, CheckCircle, Scale, Volume2, Waves, Piano, Sliders, Music } from "lucide-react";
 
 interface PianoRollProps {
   notes: MidiNote[];
@@ -267,7 +267,7 @@ export default function PianoRoll({
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-lg">{inst.icon}</span>
+                    <span className="text-lg">{(() => { switch(inst.icon) { case "Piano": return <Piano className="w-5 h-5" />; case "Sliders": return <Sliders className="w-5 h-5" />; case "Music": return <Music className="w-5 h-5" />; default: return <Piano className="w-5 h-5" />; } })()}</span>
                     <div className="flex flex-col text-left">
                       <span className="font-bold text-sm tracking-wide">{inst.label}</span>
                       <span className="text-[9px] opacity-60 font-mono">{inst.desc}</span>
