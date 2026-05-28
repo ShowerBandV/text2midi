@@ -30,7 +30,7 @@ export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
   };
 
   return (
-    <nav className="fixed top-0 w-full z-50 bg-surface/60 backdrop-blur-xl border-b border-white/10 shadow-sm" id="top-nav">
+    <nav className="w-full bg-surface/60 backdrop-blur-xl border-b border-white/10 shadow-sm" id="top-nav">
       <div className="flex justify-between items-center px-lg py-md w-full">
         {/* Brand Logo */}
         <div 
