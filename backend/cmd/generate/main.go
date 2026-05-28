@@ -148,6 +148,13 @@ func main() {
 			}
 		}
 	}
+	// Build style profile from template library.
+	profile, profErr := musicdna.BuildStyleProfile(templateLib, *styleName)
+	if profErr != nil {
+		profile = &musicdna.StyleProfile{Name: "default"}
+	}
+	_ = profile
+
 	evMap := make(map[string][]schema.NoteEvent)
 
 	evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars)
