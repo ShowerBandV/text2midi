@@ -259,7 +259,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
 
           <div className="flex items-center gap-md">
             {/* Realtime Tempo Knob input */}
-            <div className="flex flex-col select-none">
+            <div className="flex flex-col select-none flex-shrink-0">
               <span className="text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold">Tempo</span>
               <div className="flex items-center gap-1">
                 <input
@@ -294,7 +294,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
         {/* Sidebar Controls panel */}
         <aside className="w-72 bg-surface-container-lowest border-r border-white/10 overflow-hidden p-lg flex flex-col gap-lg select-none">
           {/* Tone instrument matrix */}
-          <div>
+          <div className="flex-shrink-0">
             <h3 className="text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold gap-1.5 flex items-center mb-sm">
               <span>Instrument</span>
             </h3>
@@ -333,7 +333,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
               <span>Key & Scale Selection</span>
             </h3>
             <div className="grid grid-cols-2 gap-sm">
-              <div className="flex flex-col">
+              <div className="flex flex-col flex-shrink-0">
                 <label className="text-[9px] text-on-surface-variant uppercase font-mono mb-1">Root Key</label>
                 <select
                   value={rootKey}
