@@ -3,9 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math/rand"
 	"os"
-	"time"
 
 	"github.com/ShowerBandV/text2midi/internal/agent"
 	"github.com/ShowerBandV/text2midi/internal/composer"
@@ -127,105 +125,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	// --- Midra-style 4-generator pipeline ---
+
+
+
+	}
+	_ = templateHarmony
+	chordStrs := []string{"C", "G", "Am", "F"}
+	chordStrs := []string{"C", "G", "Am", "F"}
 	evMap := make(map[string][]schema.NoteEvent)
-	// --- SongComposer: emotion-driven full composition ---
-	emotion := composer.DetectEmotionFromLLM(mood)
-	curve := composer.BuildEmotionCurve(composer.DefaultEmotions(),
-		map[string]int{"intro": 2, "verse": 4, "chorus": 4, "bridge": 2, "outro": 2},
-		[]string{"intro", "verse", "chorus", "bridge", "outro"}, plan.TotalBars)
-	_, _ = emotion, curve
 
-	// Use template harmony if available, else use song planner.
-
-	basePitch := 60
-	if plan.Key.Root == "C" || plan.Key.Root == "A" {
-		basePitch = 60
-	} else if plan.Key.Root == "D" || plan.Key.Root == "G" {
-		basePitch = 62
-	} else if plan.Key.Root == "E" || plan.Key.Root == "B" {
-		basePitch = 64
-	} else if plan.Key.Root == "F" {
-		basePitch = 65
-	}
-
-	motif := []int{0, 2, 4, 3, 0} // fallback
-	templateHarmony := []string{} // harmony from matched template
-
-	// --- MusicDNA Template Lookup ---
-	templateLib := musicdna.NewTemplateDB("./templates")
-	if templates, err := templateLib.FindByStyle(*styleName); err == nil && len(templates) > 0 {
-		for _, t := range templates {
-			if len(t.DNA.Motif.Pattern) > 1 {
-				motif = t.DNA.Motif.Pattern
-				// Extract harmony progression from template.
-				for _, cb := range t.DNA.Harmony.Progression {
-					templateHarmony = append(templateHarmony, cb.Chord)
-				}
-				fmt.Printf("  Template: %s motif=%v chords=%v\n", t.Name, motif, templateHarmony)
-				break
-			}
-		}
-	}
-
-	chordStrs := templateHarmony
-	if len(chordStrs) > plan.TotalBars {
-		chordStrs = chordStrs[:plan.TotalBars] // trim to current song length
-	}
-	if len(chordStrs) == 0 {
-		chordStrs = make([]string, len(plan.ChordProgression))
-		for i, cp := range plan.ChordProgression {
-			chordStrs[i] = cp.Chord
-		}
-	}
-	if len(chordStrs) == 0 {
-		chordStrs = []string{"C", "G", "Am", "F"}
-	}
-	// Style-aware motif derived from feature vector.
-	// High energy + high rhythmic → aggressive intervals (fourths, fifths).
-	// Low energy + high lofi → stepwise motion, narrow range.
-	// High tension → augmented/diminished intervals.
-	fv := plan.FeatureVector
-	if len(motif) < 2 {
-		motif = styleAwareMotif(fv.Darkness, fv.Energy, fv.Tension, fv.RhythmicComplexity, plan.Key.Mode)
-	}
-
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	_ = rng
-
-	// Run SongComposer.
-	evMap = composer.ComposeSong(motif, chordStrs, plan.TotalBars, basePitch, plan.BPM, rng,
-		plan.FeatureVector.Darkness, plan.FeatureVector.Energy,
-		plan.FeatureVector.RhythmicComplexity, plan.FeatureVector.Tension)
-	fmt.Printf("  SongComposer: %d tracks\n", len(evMap))
-
-	// --- Midra-style lead generation (scale-degree motif, 65% stepwise, random velocity/duation) ---
-	// Midra-style drums (kick+snare+hihat, random variation).
-	dn := composer.GenerateDrumsMidra(plan.TotalBars)
-	if len(dn) > 0 {
-		evMap["drums"] = dn
-	}
-
-	// Midra-style pad/chords (block vs arp alternation, random timing/velocity).
-	pn := composer.GenerateChordsMidra(chordStrs, plan.TotalBars)
-	if len(pn) > 0 {
-		evMap["pad"] = pn
-	}
-
-	// Midra-style bass (chord-root based, octave shifts, random duration/velocity).
-	bn := composer.GenerateBassMidra(chordStrs, plan.TotalBars)
-	if len(bn) > 0 {
-		evMap["bass"] = bn
-	}
-
-	ln := composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars)
-	if len(ln) > 0 {
-		evMap["lead"] = ln
-		fmt.Printf("  Lead: %d Midra-style notes\n", len(ln))
-	}
-
-
-
-	agent.GenerateChordPad(plan, evMap)
+	evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars)
+	evMap["bass"] = composer.GenerateBassMidra(chordStrs, plan.TotalBars)
+	evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars)
+	evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars)
+	fmt.Printf("  Generated: drums+bass+pad+lead\n")
 
 	// Generate rhythm guitar power chords for distorted guitar tracks.
 	for _, at := range arr.Tracks {
