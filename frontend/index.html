@@ -456,6 +456,9 @@ function displayResult(data) {
   // Show midi info
   document.getElementById('midiInfo').style.display = 'block';
 
+  // Try to extract and show DNA
+  extractDNA();
+
   // Scroll to result
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -488,9 +491,117 @@ go run ./cmd/generate/ \\
   document.getElementById('midiInfo').style.display = 'none';
 }
 
+function extractDNA() {
+  if (!lastResult) return;
+  // Only works if the server has the events data - for now, show DNA from generation if available
+  if (lastResult.dna) {
+    displayDNA({dna: lastResult.dna, quality: lastResult.dna_quality || 0.5});
+  } else {
+    // Try loading from dna.json alongside the MIDI file
+    if (lastResult.fileId) {
+      // Future: could call POST /api/dna/extract
+    }
+    document.getElementById('dnaCard').style.display = 'none';
+  }
+}
+
 function downloadMidi() {
   if (lastResult?.fileId) {
     window.open(API_URL + '/api/files/' + lastResult.fileId, '_blank');
+  }
+}
+
+function displayDNA(dna) {
+  if (!dna) { document.getElementById('dnaCard').style.display = 'none'; return; }
+  document.getElementById('dnaCard').style.display = 'block';
+
+  // Quality
+  const q = dna.quality || 0;
+  document.getElementById('dnaQuality').textContent = 'quality: ' + q.toFixed(2);
+
+  // Structure
+  const struct = dna.dna?.structure;
+  if (struct?.sections) {
+    document.getElementById('dnaStructure').innerHTML = struct.sections.map(s =>
+      '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>' + s.name +
+      '</span><span style="color:#888">bars ' + s.start_bar + '-' + (s.start_bar + s.bars - 1) +
+      ' <span style="color:#555">E=' + s.energy.toFixed(2) + '</span></span></div>'
+    ).join('');
+    if (struct.template) {
+      document.getElementById('dnaStructure').innerHTML +=
+        '<div style="color:#555;font-size:11px;margin-top:4px">Template: ' + struct.template + '</div>';
+    }
+  }
+
+  // Harmony
+  const harm = dna.dna?.harmony;
+  if (harm?.progression) {
+    document.getElementById('dnaHarmony').innerHTML =
+      '<div style="color:#888;margin-bottom:4px">Key: <span style="color:#a855f7">' + (harm.key || '?') + '</span></div>' +
+      harm.progression.slice(0, 8).map(c =>
+        '<span style="display:inline-block;background:#1f1f2a;padding:2px 8px;border-radius:4px;margin:2px;font-size:12px">' +
+        c.chord + '</span>'
+      ).join('') +
+      (harm.progression.length > 8 ? ' <span style="color:#555;font-size:11px">+' + (harm.progression.length - 8) + ' more</span>' : '');
+  }
+
+  // Motif
+  const m = dna.dna?.motif;
+  if (m?.pattern) {
+    let html = '<div style="color:#888;font-size:11px;margin-bottom:4px">Pattern: <span style="color:#a855f7;font-family:monospace">[' +
+      m.pattern.slice(0, 8).join(', ') + (m.pattern.length > 8 ? '...]' : ']') + '</span></div>';
+    if (m.score) {
+      html += '<div style="font-size:11px;color:#555">Score: </div>';
+      ['repetition','contour','simplicity','rhythm_identity','total'].forEach(k => {
+        const v = m.score[k];
+        if (v !== undefined) {
+          const pct = Math.round(v * 100);
+          html += '<div style="display:flex;align-items:center;gap:6px;font-size:11px;margin:2px 0">' +
+            '<span style="color:#666;min-width:70px">' + k.replace('_',' ') + '</span>' +
+            '<div style="flex:1;height:4px;background:#1f1f2a;border-radius:2px"><div style="width:' + pct + '%;height:100%;background:#a855f7;border-radius:2px"></div></div>' +
+            '<span style="color:#555;min-width:24px;text-align:right">' + v.toFixed(2) + '</span></div>';
+        }
+      });
+    }
+    document.getElementById('dnaMotif').innerHTML = html;
+  }
+
+  // Emotion
+  const e = dna.dna?.emotion;
+  if (e) {
+    const dims = ['tension','energy','warmth','stability','brightness'];
+    let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">';
+    dims.forEach(d => {
+      const v = e[d];
+      if (v !== undefined) {
+        const pct = Math.round(v * 100);
+        const hue = d === 'tension' || d === 'energy' ? 280 : 160;
+        html += '<div><div style="font-size:10px;color:#555">' + d + '</div>' +
+          '<div style="height:4px;background:#1f1f2a;border-radius:2px;margin:2px 0">' +
+          '<div style="width:' + pct + '%;height:100%;background:hsl(' + hue + ',70%,50%);border-radius:2px"></div></div>' +
+          '<div style="font-size:10px;color:#666;text-align:right">' + v.toFixed(2) + '</div></div>';
+      }
+    });
+    html += '</div>';
+    document.getElementById('dnaEmotion').innerHTML = html;
+  }
+
+  // Rhythm
+  const r = dna.dna?.rhythm;
+  if (r) {
+    document.getElementById('dnaRhythm').innerHTML =
+      '<div>Density: <span style="color:#a855f7">' + r.density?.toFixed(2) + '</span></div>' +
+      '<div>Swing: <span style="color:#a855f7">' + r.swing_amount?.toFixed(2) + '</span></div>' +
+      '<div>Syncopation: <span style="color:#a855f7">' + r.syncopation?.toFixed(2) + '</span></div>';
+  }
+
+  // Dynamics
+  const dy = dna.dna?.dynamics;
+  if (dy) {
+    document.getElementById('dnaDynamics').innerHTML =
+      '<div>Avg Velocity: <span style="color:#a855f7">' + dy.avg_velocity?.toFixed(2) + '</span></div>' +
+      '<div>Dynamic Range: <span style="color:#a855f7">' + dy.dynamic_range?.toFixed(2) + '</span></div>' +
+      '<div>Crescendo: <span style="color:#a855f7">' + (dy.crescendo ? 'Yes' : 'No') + '</span></div>';
   }
 }
 

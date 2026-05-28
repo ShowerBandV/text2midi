@@ -16,6 +16,7 @@ type MusicDNA struct {
 	Rhythm    RhythmDNA    `json:"rhythm"`
 	Texture   TextureDNA   `json:"texture"`
 	Dynamics  DynamicsDNA  `json:"dynamics"`
+	Emotion   EmotionDNA   `json:"emotion"`
 }
 
 // Print returns a human-readable summary.
@@ -27,6 +28,7 @@ func (d *MusicDNA) Print() string {
 	s += d.Rhythm.Print()
 	s += d.Texture.Print()
 	s += d.Dynamics.Print()
+	s += d.Emotion.Print()
 	return s
 }
 
@@ -194,6 +196,23 @@ type DynamicsDNA struct {
 func (d *DynamicsDNA) Print() string {
 	return fmt.Sprintf("--- Dynamics ---\n  range=%.2f avg_vel=%.2f crescendo=%v\n",
 		d.DynamicRange, d.AvgVelocity, d.Crescendo)
+}
+
+// ─── Emotion ──────────────────────────────────────────────────────
+
+type EmotionDNA struct {
+	Tension    float64   `json:"tension"`    // 0-1 tension/anxiety
+	Energy     float64   `json:"energy"`     // 0-1 overall energy
+	Warmth     float64   `json:"warmth"`     // 0-1 warm vs cold
+	Stability  float64   `json:"stability"`  // 0-1 stable vs chaotic
+	Brightness float64   `json:"brightness"` // 0-1 bright vs dark
+	Curve      []float64 `json:"curve,omitempty"`  // per-bar energy values
+	Confidence float64   `json:"confidence"`
+}
+
+func (e *EmotionDNA) Print() string {
+	return fmt.Sprintf("--- Emotion ---\n  tension=%.2f energy=%.2f warmth=%.2f stability=%.2f brightness=%.2f\n",
+		e.Tension, e.Energy, e.Warmth, e.Stability, e.Brightness)
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────

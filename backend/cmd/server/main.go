@@ -41,13 +41,19 @@ func main() {
 
 	outputDir := "./generated"
 	fs := store.NewFileStore(outputDir)
+	libDir := "./dna_library"
 
 	mux := http.NewServeMux()
-	srv := &Server{fs: fs, outputDir: outputDir}
+	srv := &Server{fs: fs, outputDir: outputDir, libDir: libDir}
 
 	mux.HandleFunc("GET /api/info", srv.handleInfo)
 	mux.HandleFunc("POST /api/generate", srv.handleGenerate)
 	mux.HandleFunc("GET /api/files/{id}", srv.handleDownload)
+
+	// DNA endpoints.
+	mux.HandleFunc("POST /api/dna/extract", srv.handleDNAExtract)
+	mux.HandleFunc("GET /api/dna/library", srv.handleDNALibraryList)
+	mux.HandleFunc("GET /api/dna/library/{name}", srv.handleDNALibraryGet)
 
 	addr := ":" + port
 	log.Printf("🚀 Server starting on %s", addr)
@@ -64,6 +70,7 @@ func main() {
 type Server struct {
 	fs        *store.FileStore
 	outputDir string
+	libDir    string
 	mu        sync.Mutex // protects concurrent generation
 }
 
@@ -183,6 +190,54 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- Core generation ---
+
+// ─── DNA Handlers ─────────────────────────────────────────────────
+
+type DNAExtractRequest struct {
+	EventsByTrack map[string][]schema.NoteEvent `json:"events_by_track"`
+	TotalBars     int                            `json:"total_bars"`
+	Key           string                         `json:"key"`
+}
+
+func (s *Server) handleDNAExtract(w http.ResponseWriter, r *http.Request) {
+	var req DNAExtractRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
+		return
+	}
+	ext := musicdna.NewExtractor()
+	dna := ext.Extract(req.EventsByTrack, req.TotalBars, req.Key)
+	quality := musicdna.ScoreTemplate(dna)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"dna":     dna,
+		"quality": quality,
+	})
+}
+
+func (s *Server) handleDNALibraryList(w http.ResponseWriter, r *http.Request) {
+	lib := musicdna.NewLibrary(s.libDir)
+	templates, err := lib.List("")
+	if err != nil {
+		writeJSON(w, http.StatusOK, []musicdna.DNATemplate{})
+		return
+	}
+	writeJSON(w, http.StatusOK, templates)
+}
+
+func (s *Server) handleDNALibraryGet(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "missing name"})
+		return
+	}
+	lib := musicdna.NewLibrary(s.libDir)
+	tmpl, err := lib.Load(name)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "template not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, tmpl)
+}
 
 func (s *Server) generate(req GenerateRequest) (*GenerateResponse, error) {
 	client, err := llm.NewClient()

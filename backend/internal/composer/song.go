@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 
+	"github.com/ShowerBandV/text2midi/internal/generator"
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
@@ -373,6 +374,10 @@ func ComposeSongWithContext(ctx *GenerationContext) map[string][]schema.NoteEven
 	// Step 5: Pad (DNA-aware)
 	evMap["pad"] = GeneratePad(ctx.Chords, timeline, ctx.Darkness, ctx.Energy, ctx.Rhythmic, ctx.Tension)
 	fmt.Printf("[Pad] %d events\n", len(evMap["pad"]))
+
+	// Step 6: FX / special effects (energy-driven)
+	evMap["fx"] = generator.GenerateFX(ctx.TotalBars, ctx.BPM, ctx.Energy, ctx.Tension)
+	fmt.Printf("[FX] %d events\n", len(evMap["fx"]))
 
 	fmt.Printf("[SongComposer] done: %d tracks\n", len(evMap))
 	return evMap

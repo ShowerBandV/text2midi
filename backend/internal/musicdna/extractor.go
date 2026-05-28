@@ -26,6 +26,7 @@ func (e *Extractor) Extract(eventsByTrack map[string][]schema.NoteEvent, totalBa
 		Rhythm:    e.extractRhythm(eventsByTrack, totalBars),
 		Texture:   e.extractTexture(eventsByTrack),
 		Dynamics:  e.extractDynamics(eventsByTrack, totalBars),
+		Emotion:   e.extractEmotion(eventsByTrack, totalBars),
 	}
 	return dna
 }
@@ -917,7 +918,105 @@ func (e *Extractor) extractDynamics(eventsByTrack map[string][]schema.NoteEvent,
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 7. MIDI Cleaner — filter noisy/invalid MIDI data
+// 7. Emotion Analyzer
+// ═══════════════════════════════════════════════════════════════════
+
+func (e *Extractor) extractEmotion(eventsByTrack map[string][]schema.NoteEvent, totalBars int) EmotionDNA {
+	ed := EmotionDNA{}
+	if totalBars == 0 {
+		return ed
+	}
+
+	bpb := 4
+	barVelocities := make([]float64, totalBars)
+	barDensities := make([]float64, totalBars)
+
+	for _, events := range eventsByTrack {
+		for _, ev := range events {
+			bar := int(ev.StartBeat) / bpb
+			if bar >= 0 && bar < totalBars {
+				barVelocities[bar] += float64(ev.Velocity)
+				barDensities[bar]++
+			}
+		}
+	}
+
+	// Normalize per-bar.
+	var totalVel, totalDensity float64
+	for bar := 0; bar < totalBars; bar++ {
+		if barDensities[bar] > 0 {
+			barVelocities[bar] /= barDensities[bar]
+		}
+		barVelocities[bar] /= 127.0
+		barDensities[bar] = Clamp01(barDensities[bar] / float64(totalBars*4))
+		totalVel += barVelocities[bar]
+		totalDensity += barDensities[bar]
+	}
+
+	avgVel := totalVel / float64(totalBars)
+	avgDensity := totalDensity / float64(totalBars)
+
+	// Energy: composite of velocity + density
+	ed.Energy = Clamp01(avgVel*0.6 + avgDensity*0.4)
+
+	// Tension: variance in velocity (erratic = tense)
+	var velVariance float64
+	for bar := 0; bar < totalBars; bar++ {
+		diff := barVelocities[bar] - avgVel
+		velVariance += diff * diff
+	}
+	velVariance /= float64(totalBars)
+	ed.Tension = Clamp01(velVariance * 3.0)
+
+	// Warmth: lower average pitch = warmer (bass-heavy)
+	var totalPitch, pitchCount float64
+	for _, events := range eventsByTrack {
+		for _, ev := range events {
+			totalPitch += float64(ev.Pitch)
+			pitchCount++
+		}
+	}
+	if pitchCount > 0 {
+		avgPitch := totalPitch / pitchCount
+		// 0-127 MIDI: 60 = middle C. Lower = warmer.
+		warmth := 1.0 - Clamp01(avgPitch/127.0)
+		ed.Warmth = Clamp01(warmth * 1.5)
+	}
+
+	// Stability: low density variance = stable
+	var densVariance float64
+	for bar := 0; bar < totalBars; bar++ {
+		diff := barDensities[bar] - avgDensity
+		densVariance += diff * diff
+	}
+	densVariance /= float64(totalBars)
+	ed.Stability = Clamp01(1.0 - densVariance*2.0)
+
+	// Brightness: detect high-pitch content (pitch > 72)
+	var highCount float64
+	for _, events := range eventsByTrack {
+		for _, ev := range events {
+			if ev.Pitch >= 72 {
+				highCount++
+			}
+		}
+	}
+	if pitchCount > 0 {
+		ed.Brightness = Clamp01(highCount / pitchCount * 2.0)
+	}
+
+	// Energy curve (per-bar)
+	ed.Curve = make([]float64, totalBars)
+	for bar := 0; bar < totalBars; bar++ {
+		ed.Curve[bar] = barVelocities[bar]
+	}
+
+	ed.Confidence = Clamp01((ed.Energy + ed.Tension + ed.Warmth + ed.Stability + ed.Brightness) / 5.0)
+	return ed
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 8. MIDI Cleaner — filter noisy/invalid MIDI data
 // ═══════════════════════════════════════════════════════════════════
 
 // CleanMIDI filters noisy/invalid events and returns cleaned track data.
