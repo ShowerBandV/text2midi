@@ -234,7 +234,7 @@ export default function App() {
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {/* Main Container screen sections */}
-      <main className="flex-1 pt-16 overflow-hidden">
+      <main className="flex-1 pt-20 overflow-hidden">
         {/* Loading overlay view block */}
         {isGenerating && (
           <div className="fixed inset-0 z-50 bg-[#0e0e0e]/90 backdrop-blur-md flex flex-col items-center justify-center p-lg">
@@ -418,7 +418,7 @@ export default function App() {
           )}
 
           {activeTab === "editor" && (
-            <div className="h-full border border-white/10 rounded-2xl overflow-hidden glass-panel flex flex-col shadow-2xl">
+            <div className="h-full border border-white/10 rounded-b-2xl overflow-hidden glass-panel flex flex-col shadow-2xl">
               <PianoRoll
                 notes={notes}
                 setNotes={setNotes}
