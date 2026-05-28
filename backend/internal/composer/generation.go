@@ -3,6 +3,8 @@ package composer
 
 import (
 	"math/rand"
+
+	"github.com/ShowerBandV/text2midi/internal/musicdna"
 )
 
 // GenerationContext bundles all parameters for ComposeSong.
@@ -25,6 +27,9 @@ type GenerationContext struct {
 
 	// ComposerDNA personality (from archetype or DNA library).
 	DNA *ComposerDNA
+
+	// MotifSource controls motif selection: "dna", "default", "random"
+	MotifSource string
 
 	// Emotion curve for bar-granular dynamics.
 	EmotionCurve *EmotionCurve
@@ -130,4 +135,93 @@ func NewRNG() *rand.Rand {
 func DefaultDNA() *ComposerDNA {
 	archetype := ComposerArchetypes["Classical Purist"]
 	return &archetype
+}
+
+// GenerateContextFromDNA converts extracted MusicDNA into a GenerationContext
+// for MIDI generation. This closes the DNA ↔ MIDI loop.
+func GenerateContextFromDNA(dna *musicdna.MusicDNA, bpm, bars int) *GenerationContext {
+	ctx := NewDefaultContext(8, 120)
+	if dna == nil {
+		return ctx
+	}
+
+	// Structure → TotalBars
+	totalBars := 0
+	for _, s := range dna.Structure.Sections {
+		totalBars += s.Bars
+	}
+	if totalBars > 0 {
+		ctx.TotalBars = totalBars
+	}
+	if bars > 0 {
+		ctx.TotalBars = bars
+	}
+	if bpm > 0 {
+		ctx.BPM = bpm
+	}
+
+	// Harmony → Chords
+	if len(dna.Harmony.Progression) > 0 {
+		chords := make([]string, 0, len(dna.Harmony.Progression))
+		for _, c := range dna.Harmony.Progression {
+			if c.Chord != "" && c.Chord != "-" {
+				chords = append(chords, c.Chord)
+			}
+		}
+		if len(chords) > 0 {
+			ctx.Chords = chords
+		}
+	}
+
+	// Motif → seed
+	if len(dna.Motif.Pattern) >= 2 {
+		ctx.Motif = dna.Motif.Pattern
+	}
+
+	// Feature vector from EmotionDNA
+	ctx.Darkness = 1.0 - dna.Emotion.Brightness
+	ctx.Energy = dna.Emotion.Energy
+	ctx.Tension = dna.Emotion.Tension
+	ctx.Rhythmic = dna.Rhythm.Syncopation
+
+	// ComposerDNA from MusicDNA
+	cd := DNAFromMusicDNA(dna)
+	ctx.DNA = &cd
+
+	// Emotion curve
+	if len(dna.Emotion.Curve) > 0 {
+		bCount := len(dna.Emotion.Curve)
+		curve := &EmotionCurve{Bars: make([]EmotionState, bCount)}
+		for i, e := range dna.Emotion.Curve {
+			curve.Bars[i] = EmotionState{
+				Tension:    dna.Emotion.Tension * e,
+				Energy:     e,
+				Warmth:     dna.Emotion.Warmth,
+				Stability:  dna.Emotion.Stability,
+				Brightness: dna.Emotion.Brightness,
+			}
+		}
+		ctx.EmotionCurve = curve
+	}
+
+	return ctx
+}
+
+// MotifFromLibrary loads the highest-quality motif from the DNA library.
+func MotifFromLibrary(libDir, style string) []int {
+	lib := musicdna.NewLibrary(libDir)
+	templates, err := lib.List(style)
+	if err != nil || len(templates) == 0 {
+		return nil
+	}
+	best := templates[0]
+	for _, t := range templates[1:] {
+		if t.Quality > best.Quality {
+			best = t
+		}
+	}
+	if len(best.DNA.Motif.Pattern) >= 2 {
+		return best.DNA.Motif.Pattern
+	}
+	return nil
 }
