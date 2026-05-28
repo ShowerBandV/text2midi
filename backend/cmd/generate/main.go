@@ -132,7 +132,22 @@ func main() {
 	}
 	_ = templateHarmony
 	chordStrs := []string{"C", "G", "Am", "F"}
-	chordStrs := []string{"C", "G", "Am", "F"}
+	// --- MusicDNA Template Lookup ---
+	templateLib := musicdna.NewTemplateDB("./templates")
+	if templates, err := templateLib.FindByStyle(*styleName); err == nil && len(templates) > 0 {
+		for _, t := range templates {
+			if len(t.DNA.Harmony.Progression) > 1 {
+				chordStrs = nil
+				for _, cb := range t.DNA.Harmony.Progression {
+					chordStrs = append(chordStrs, cb.Chord)
+				}
+				if len(chordStrs) > plan.TotalBars { chordStrs = chordStrs[:plan.TotalBars] }
+				fmt.Printf("  Template: %s chords=%v
+", t.Name, chordStrs)
+				break
+			}
+		}
+	}
 	evMap := make(map[string][]schema.NoteEvent)
 
 	evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars)
