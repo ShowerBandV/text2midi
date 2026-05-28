@@ -408,7 +408,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
             
             {/* Playhead Line Indicator Component */}
             <div
-              className="absolute top-0 bottom-0 w-[2px] bg-secondary z-30 shadow-[0_0_12px_rgba(93,230,255,0.8)] pointer-events-none transition-all duration-75"
+              className="absolute top-0 bottom-0 w-[2px] bg-secondary z-30 shadow-[0_0_12px_rgba(93,230,255,0.8)] pointer-events-none "
               style={{ left: `${(currentBeat / 0.5) * COLUMN_WIDTH}px` }}
             />
 
