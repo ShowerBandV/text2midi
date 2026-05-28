@@ -234,7 +234,7 @@ export default function App() {
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {/* Main Container screen sections */}
-      <main className="flex-grow pt-28 pb-xl">
+      <main className="flex-grow pt-28" style="height:calc(100vh-0rem);overflow:hidden">
         {/* Loading overlay view block */}
         {isGenerating && (
           <div className="fixed inset-0 z-50 bg-[#0e0e0e]/90 backdrop-blur-md flex flex-col items-center justify-center p-lg">
@@ -256,7 +256,7 @@ export default function App() {
         )}
 
         {/* Dynamic Route views Render Switch */}
-        <div className="w-full px-lg">
+        <div className="w-full px-lg" style="height:calc(100vh - 5rem);overflow-y:auto">
           {activeTab === "generate" && (
             <div className="flex flex-col gap-14">
               
@@ -418,7 +418,7 @@ export default function App() {
           )}
 
           {activeTab === "editor" && (
-            <div className="h-[calc(100vh-8rem)] border border-white/10 rounded-2xl overflow-hidden glass-panel flex flex-col shadow-2xl">
+            <div className="h-full border border-white/10 rounded-2xl overflow-hidden glass-panel flex flex-col shadow-2xl">
               <PianoRoll
                 notes={notes}
                 setNotes={setNotes}
@@ -452,25 +452,7 @@ export default function App() {
       </main>
 
       {/* Shared site Footer */}
-      <footer className="w-full py-lg mt-auto bg-surface-container-lowest border-t border-white/5 select-none">
-        <div className="flex flex-col md:flex-row justify-between items-center px-lg w-full gap-md text-xs">
-          <div className="flex flex-col items-center md:items-start gap-1">
-            <div className="font-display font-extrabold text-base bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              MidiMind AI
-            </div>
-            <p className="text-[10px] text-on-surface-variant opacity-80">
-              © 2026 MidiMind AI. All rights reserved.
-            </p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-lg text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
-            <a className="hover:text-primary transition-colors" href="#terms">Terms</a>
-            <a className="hover:text-primary transition-colors" href="#privacy">Privacy</a>
-            <a className="hover:text-primary transition-colors" href="#api">API docs</a>
-            <a className="hover:text-primary transition-colors" href="#discord">Discord</a>
-            <a className="hover:text-primary transition-colors" href="#twitter">Twitter / X</a>
-          </div>
-        </div>
-      </footer>
+      
     </div>
   );
 }
