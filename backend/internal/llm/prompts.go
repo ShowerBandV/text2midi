@@ -370,7 +370,7 @@ func BuildPopPatternPrompt(style, styleDescription, userPrompt string, bpm, bars
 
 Arrangement knowledge reference:
 - STRUCTURE: Intro(2bars, sparse) -> Verse(4-8bars, low energy) -> Pre-Chorus(2-4bars, build) -> Chorus(4-8bars, full) -> Bridge(4bars, contrast) -> Final Chorus(out)。
-- DYNAMIC CONTRAST: Verse uses 30% energy, Chorus uses 100%. Instruments enter GRADUALLY: piano first, then bass, then drums, then strings.
+- DYNAMIC CONTRAST: Verse uses 30%% energy, Chorus uses 100%%. Instruments enter GRADUALLY: piano first, then bass, then drums, then strings.
 - Verse: 8th note broken chords, low velocity, passing/auxiliary tones. Keep space for vocal.
 - Pre-chorus: ascending 16th notes, G/B inversion, anticipation/suspension, hi-hat opens up.
 - Chorus: ALL instruments. Block chords, loud, appoggiatura for emotional peak, crash cymbal on beat 1.
@@ -652,18 +652,18 @@ Constraints:
 //   - styleDesc: natural language style description
 //   - featureVec: JSON of the feature vector
 func BuildNoteSequencePrompt(instrument, key, scale, chordProg, styleDesc, featureVec string, bpm, totalBeats int, randomSeed string) string {
-	return fmt.Sprintf(`You are a professional composer writing a single instrument track.
+	prompt := `You are a professional composer writing a single instrument track.
 Return a JSON object with an "events" array. No markdown, no explanations.
 
-Instrument: %s
-Key: %s
-Scale: %s
-BPM: %d
-Total duration: %d beats
-Chord progression: %s
-Style: %s
-Feature vector: %s
-Random seed: %s
+Instrument: __INSTRUMENT__
+Key: __KEY__
+Scale: __SCALE__
+BPM: __BPM__
+Total duration: __BEATS__ beats
+Chord progression: __CHORDS__
+Style: __STYLE__
+Feature vector: __FEATURES__
+Random seed: __SEED__
 
 CRITICAL — Compose like a professional songwriter:
 1. VOCAL MELODY FIRST: Write a SINGABLE melody. Imagine a singer performing it. Melodies should have a clear emotional arc: start in a comfortable range, build tension, resolve.
@@ -687,10 +687,20 @@ Output format:
 Constraints:
 - 0 <= pitch <= 127
 - 1 <= velocity <= 127
-- start_beat >= 0, start_beat + duration_beat <= %d
+- start_beat >= 0, start_beat + duration_beat <= __BEATS__
 - Output key must be exactly "events".
 - Do NOT make every note the same duration. Vary them.
-- Do NOT fill every moment. Leave space.`, instrument, key, scale, bpm, totalBeats, chordProg, styleDesc, featureVec, randomSeed, totalBeats)
+- Do NOT fill every moment. Leave space.`
+	prompt = strings.ReplaceAll(prompt, "__INSTRUMENT__", instrument)
+	prompt = strings.ReplaceAll(prompt, "__KEY__", key)
+	prompt = strings.ReplaceAll(prompt, "__SCALE__", scale)
+	prompt = strings.ReplaceAll(prompt, "__BPM__", fmt.Sprintf("%d", bpm))
+	prompt = strings.ReplaceAll(prompt, "__BEATS__", fmt.Sprintf("%d", totalBeats))
+	prompt = strings.ReplaceAll(prompt, "__CHORDS__", chordProg)
+	prompt = strings.ReplaceAll(prompt, "__STYLE__", styleDesc)
+	prompt = strings.ReplaceAll(prompt, "__FEATURES__", featureVec)
+	prompt = strings.ReplaceAll(prompt, "__SEED__", randomSeed)
+	return prompt
 }
 
 // BuildBassFromMelodyPrompt generates a bass line that follows a lead melody.
