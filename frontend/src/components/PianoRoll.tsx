@@ -52,15 +52,25 @@ export default function PianoRoll({
   const audioCtxRef = useRef<AudioContext | null>(null);
 const pianoKeysRef = useRef<HTMLDivElement | null>(null);
 const pianoCanvasRef = useRef<HTMLDivElement | null>(null);
+const scrollSyncLock = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const pausedOffsetRef = useRef<number>(0);
   const triggeredNotesRef = useRef<Set<string>>(new Set());
 
-  // Sync piano keys vertical scrolling with grid canvas
+  // Bidirectional scroll sync between pitch keys and grid canvas
 const handleGridScroll = () => {
+  if (scrollSyncLock.current) return;
+  scrollSyncLock.current = true;
   if (pianoKeysRef.current && pianoCanvasRef.current) {
     pianoKeysRef.current.scrollTop = pianoCanvasRef.current.scrollTop;
+  }
+  scrollSyncLock.current = false;
+};
+// Scroll grid when user wheels on pitch keys area
+const handleKeysWheel = (e: React.WheelEvent) => {
+  if (pianoCanvasRef.current) {
+    pianoCanvasRef.current.scrollTop += e.deltaY;
   }
 };
 
@@ -368,7 +378,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
         {/* Piano Roll Area Grid */}
         <section className="flex-grow flex overflow-hidden relative bg-[#0a0a0a]">
           {/* Vertical C3-C5 Piano Keys Controller Column */}
-          <div ref={pianoKeysRef} className="w-16 flex-1 bg-surface-container-low flex flex-col border-r border-white/10 overflow-hidden" id="piano-keys">
+          <div ref={pianoKeysRef} onWheel={handleKeysWheel} className="w-16 flex-1 bg-surface-container-low flex flex-col border-r border-white/10 overflow-hidden" id="piano-keys">
             {PIANO_ROWS.map((pitch) => (
               <div
                 key={pitch}
