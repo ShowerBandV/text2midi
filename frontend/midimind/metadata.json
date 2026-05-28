@@ -1,0 +1,6 @@
+{
+  "name": "MidiMind",
+  "description": "AI-Powered MIDI Generation and Interactive Piano Roll Editor with low-latency Web Audio Synthesis and custom export capabilities.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

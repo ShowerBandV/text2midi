@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/ShowerBandV/text2midi/internal/agent"
+	"github.com/ShowerBandV/text2midi/internal/composer"
 	"github.com/ShowerBandV/text2midi/internal/llm"
 	"github.com/ShowerBandV/text2midi/internal/musicdna"
 	"github.com/ShowerBandV/text2midi/internal/midi"
@@ -42,9 +43,16 @@ func main() {
 	outputDir := "./generated"
 	fs := store.NewFileStore(outputDir)
 	libDir := "./dna_library"
+	local := os.Getenv("OPENAI_API_KEY") == ""
 
 	mux := http.NewServeMux()
-	srv := &Server{fs: fs, outputDir: outputDir, libDir: libDir}
+	srv := &Server{fs: fs, outputDir: outputDir, libDir: libDir, local: local}
+
+	if local {
+		log.Println("⚡ Local mode (no API key) — rule-based generation only")
+	} else {
+		log.Println("🔑 API key detected — LLM-powered generation available")
+	}
 
 	mux.HandleFunc("GET /api/info", srv.handleInfo)
 	mux.HandleFunc("POST /api/generate", srv.handleGenerate)
@@ -71,6 +79,7 @@ type Server struct {
 	fs        *store.FileStore
 	outputDir string
 	libDir    string
+	local     bool
 	mu        sync.Mutex // protects concurrent generation
 }
 
@@ -239,7 +248,98 @@ func (s *Server) handleDNALibraryGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tmpl)
 }
 
+// generateLocal uses rule-based generation without any LLM calls.
+func (s *Server) generateLocal(req GenerateRequest) (*GenerateResponse, error) {
+	ctx := composer.NewDefaultContext(req.Bars, req.BPM).
+		WithStyle(0.3, 0.6, 0.4, 0.3)
+	ctx.Motif = []int{0, 2, 4, 3, 0}
+	events := composer.ComposeSongWithContext(ctx)
+
+	// Build a minimal MidiIR from the generated events.
+	beatsPerBar := 4
+	totalBeats := req.Bars * beatsPerBar
+	var tracks []schema.TrackIR
+	trackID := 0
+
+	// Default arrangement for local mode.
+	arrangement := []struct {
+		id, name, role string
+		channel, prog, vol, pan int
+	}{
+		{"drums", "Drums", "drums", 9, 0, 100, 64},
+		{"bass", "Bass", "bass", 1, 34, 90, 64},
+		{"lead", "Lead", "lead", 4, 89, 85, 64},
+		{"pad", "Pad", "Pad", 5, 91, 70, 64},
+		{"fx", "FX", "fx", 6, 96, 60, 64},
+	}
+
+	for _, at := range arrangement {
+		ev, ok := events[at.id]
+		if !ok || len(ev) == 0 {
+			continue
+		}
+		prog := at.prog
+		tracks = append(tracks, schema.TrackIR{
+			ID: at.id, Name: at.name, Role: at.role,
+			Channel: at.channel, Program: &prog,
+			Volume: at.vol, Pan: at.pan, Enabled: true,
+			IsCoreTrack: at.role == "drums" || at.role == "bass",
+			Events: ev,
+		})
+		trackID++
+	}
+
+	midiIR := schema.MidiIR{
+		Meta: schema.Meta{
+			Title:        req.Prompt,
+			BPM:          req.BPM,
+			TicksPerBeat: 480,
+			TimeSignature: schema.TimeSignature{Numerator: 4, Denominator: 4},
+			KeySignature:  req.Key,
+			TotalBars:     req.Bars,
+			BeatsPerBar:   beatsPerBar,
+			TotalBeats:    totalBeats,
+		},
+		Tracks: tracks,
+	}
+
+	outputPath := filepath.Join(s.outputDir, "local_gen.mid")
+	renderResult, err := midi.RenderMIDI(midiIR, outputPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("render: %w", err)
+	}
+
+	midiData, err := os.ReadFile(outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("read output: %w", err)
+	}
+	fileID := fmt.Sprintf("local_%s", randID(4))
+	record, err := s.fs.SaveFile(fileID, midiData, renderResult)
+	if err != nil {
+		return nil, fmt.Errorf("save: %w", err)
+	}
+
+	// Extract and save DNA.
+	saveDir := filepath.Join(s.outputDir, record.ID)
+	musicdna.SaveDNAIfValid(events, req.Bars, req.Key, saveDir)
+
+	return &GenerateResponse{
+		Success:  true,
+		FileID:   record.ID,
+		FileName: record.FileName,
+		FileSize: record.FileSize,
+		Duration: renderResult.DurationSeconds,
+		Tracks:   renderResult.TotalTracks,
+		Meta:     renderResult,
+	}, nil
+}
+
 func (s *Server) generate(req GenerateRequest) (*GenerateResponse, error) {
+	// Local mode: skip LLM, use rule-based generation.
+	if s.local {
+		return s.generateLocal(req)
+	}
+
 	client, err := llm.NewClient()
 	if err != nil {
 		return nil, fmt.Errorf("LLM client: %w", err)

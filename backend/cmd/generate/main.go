@@ -22,16 +22,33 @@ func main() {
 	flag.String("key", "C minor", "Key")
 	bars := flag.Int("bars", 8, "Bars")
 	out := flag.String("out", "./midi_output", "Output dir")
+	local := flag.Bool("local", false, "Local mode (no API key, rule-based generation)")
 	flag.Parse()
 
-	if *prompt == "" {
+	if *prompt == "" && !*local {
 		fmt.Fprintln(os.Stderr, "Usage: go run ./cmd/generate/ --prompt \"...\"")
+		fmt.Fprintln(os.Stderr, "       go run ./cmd/generate/ --local  (rule-based, no API key)")
 		os.Exit(1)
 	}
 
 	llm.LoadDotEnv()
+
+	// Local mode: skip LLM, use rule-based generation directly.
+	if *local {
+		fmt.Println("[Local mode] Generating without LLM...")
+		ctx := composer.NewDefaultContext(*bars, *bpm).
+			WithStyle(0.3, 0.6, 0.4, 0.3)
+		ctx.Motif = []int{0, 2, 4, 3, 0}
+		events := composer.ComposeSongWithContext(ctx)
+		fmt.Printf("Generated %d tracks:\n", len(events))
+		for name, evs := range events {
+			fmt.Printf("  %s: %d events\n", name, len(evs))
+		}
+		return
+	}
+
 	if os.Getenv("OPENAI_API_KEY") == "" {
-		fmt.Fprintln(os.Stderr, "OPENAI_API_KEY required")
+		fmt.Fprintln(os.Stderr, "OPENAI_API_KEY required (or use --local for offline mode)")
 		os.Exit(1)
 	}
 

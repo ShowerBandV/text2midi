@@ -22,10 +22,9 @@ type Client struct {
 	http    *http.Client
 }
 
-// NewClient creates an LLM client from environment variables,
-// falling back to .env file in the working directory (like Python's python-dotenv).
+// NewClient creates an LLM client from environment variables.
 //
-//   - OPENAI_API_KEY (required)
+//   - OPENAI_API_KEY (required unless using local mode)
 //   - OPENAI_MODEL  (default: "deepseek-chat")
 //   - OPENAI_BASE_URL (default: "https://api.deepseek.com/v1")
 func NewClient() (*Client, error) {
@@ -51,6 +50,59 @@ func NewClient() (*Client, error) {
 		baseURL: baseURL,
 		http:    &http.Client{},
 	}, nil
+}
+
+// NewLocalClient creates a client that generates music locally without any API key.
+// All LLM calls return hardcoded sensible defaults so the generation pipeline
+// can run entirely offline using ComposeSongWithContext.
+func NewLocalClient() *Client {
+	return &Client{
+		apiKey:  "local",
+		model:   "local",
+		baseURL: "local",
+		http:    nil,
+	}
+}
+
+// IsLocal returns true if this is a local (offline) client.
+func (c *Client) IsLocal() bool {
+	return c.baseURL == "local"
+}
+
+// LocalJSON returns a default JSON response for local mode.
+// Used by the agent pipeline when no API key is available.
+func LocalJSON() map[string]any {
+	return map[string]any{
+		"intent": map[string]any{
+			"styles": []string{"lofi"},
+			"mood":   []string{"calm", "chill"},
+			"feature_vector": map[string]any{
+				"darkness":            0.3,
+				"energy":              0.4,
+				"acousticness":        0.7,
+				"density":             0.4,
+				"rhythmic_complexity": 0.3,
+				"tension":             0.2,
+				"lo_fi":               0.6,
+			},
+		},
+		"song_plan": map[string]any{
+			"title": "Local Generation",
+			"bpm":   90,
+			"key":   map[string]string{"root": "C", "mode": "major"},
+			"chord_progression": []string{"C", "G", "Am", "F", "C", "G", "F", "C"},
+			"total_bars": 8,
+			"loopable":   true,
+		},
+		"arrangement": map[string]any{
+			"tracks": []map[string]any{
+				{"id": "drums", "name": "Drums", "role": "drums", "channel": 9, "program": 0, "volume": 100, "pan": 64, "enabled": true, "is_core_track": true, "generation_strategy": "auto"},
+				{"id": "bass", "name": "Bass", "role": "bass", "channel": 1, "program": 34, "volume": 90, "pan": 64, "enabled": true, "is_core_track": true, "generation_strategy": "auto"},
+				{"id": "lead", "name": "Lead", "role": "lead", "channel": 4, "program": 89, "volume": 85, "pan": 64, "enabled": true, "is_core_track": true, "generation_strategy": "auto"},
+				{"id": "pad", "name": "Pad", "role": "Pad", "channel": 5, "program": 91, "volume": 70, "pan": 64, "enabled": true, "is_core_track": false, "generation_strategy": "auto"},
+			},
+		},
+	}
 }
 
 // chatRequest is the request body for the chat completions API.
