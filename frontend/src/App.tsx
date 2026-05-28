@@ -418,7 +418,7 @@ export default function App() {
           )}
 
           {activeTab === "editor" && (
-            <div className="h-[calc(100vh-7rem)] border border-white/10 rounded-2xl overflow-hidden glass-panel flex flex-col shadow-2xl">
+            <div className="fixed inset-x-0 top-28 bottom-0 border-0 rounded-none overflow-hidden glass-panel flex flex-col shadow-2xl">
               <PianoRoll
                 notes={notes}
                 setNotes={setNotes}
