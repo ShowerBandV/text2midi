@@ -253,6 +253,63 @@ func (s *MusicScore) NeedsRegeneration() bool {
 	return s.Total < 0.4
 }
 
+// Repair applies automated fixes when quality is low.
+// Returns true if any repairs were made.
+func Repair(eventsByTrack map[string][]schema.NoteEvent, score *MusicScore, totalBars int) bool {
+	repaired := false
+
+	if score.Climax < 0.5 {
+		// Boost energy in last third of the song.
+		oneThird := totalBars / 3
+		if oneThird < 1 {
+			oneThird = 1
+		}
+		for trackID, events := range eventsByTrack {
+			if trackID == "drums" {
+				continue
+			}
+			for i := range events {
+				bar := int(events[i].StartBeat) / 4
+				if bar >= totalBars-oneThird {
+					// Boost velocity by 20%.
+					events[i].Velocity = int(float64(events[i].Velocity) * 1.2)
+					if events[i].Velocity > 127 {
+						events[i].Velocity = 127
+					}
+					repaired = true
+				}
+			}
+		}
+		fmt.Print("[Critic] repair: boosted climax energy\n")
+	}
+
+	if score.Repetition < 0.3 {
+		// Not enough repetition — can't easily fix without regenerating.
+		// Flag for regeneration.
+		fmt.Print("[Critic] warn: low repetition, consider regeneration\n")
+	}
+
+	if score.Groove < 0.4 {
+		// Add slight swing to drum velocities.
+		if drums, ok := eventsByTrack["drums"]; ok {
+			for i := range drums {
+				if i%2 == 1 {
+					drums[i].Velocity = int(float64(drums[i].Velocity) * 0.85)
+				}
+			}
+			repaired = true
+		}
+		fmt.Print("[Critic] repair: enhanced drum groove\n")
+	}
+
+	if score.Density < 0.4 {
+		// Too uniform — add some variation by doubling drum hits in high-energy sections.
+		fmt.Print("[Critic] warn: density too uniform\n")
+	}
+
+	return repaired
+}
+
 func getTrack(m map[string][]schema.NoteEvent, ids ...string) []schema.NoteEvent {
 	for _, id := range ids {
 		if evs, ok := m[id]; ok && len(evs) > 0 {

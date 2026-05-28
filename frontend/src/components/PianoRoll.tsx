@@ -59,6 +59,7 @@ const scrollSyncLock = useRef(false);
   const startTimeRef = useRef<number>(0);
   const pausedOffsetRef = useRef<number>(0);
   const triggeredNotesRef = useRef<Set<string>>(new Set());
+const beatRef = useRef(0);
 
   // Bidirectional scroll sync between pitch keys and grid canvas
 const handleGridScroll = () => {
@@ -107,26 +108,37 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
         const rawBeat = elapsedSec * beatsPerSec;
         const loopBeat = rawBeat % TOTAL_BEATS;
 
+        // Update ref immediately (always accurate, no re-render)
+        beatRef.current = loopBeat;
+
         // Reset trigger memory if we looped
-        if (loopBeat < currentBeat) {
+        if (loopBeat < beatRef.current - 1) {
           triggeredNotesRef.current.clear();
         }
 
+        // Only update React state for display (throttled by rAF is fine)
         setCurrentBeat(loopBeat);
 
-        // Sound Engine Player Scheduler (Sweeps nodes exactly as playhead intersects them)
-        const ctx = getAudioContext();
+        // Sound Engine Player Scheduler - use ref for accurate timing
+        const beatSec = 60 / tempo;
+        const currentBeatAccurate = beatRef.current;
+        
         notes.forEach((note) => {
-          // Play notes when the cursor intersects their start time (within a small tolerance buffer)
-          if (
-            note.time <= loopBeat &&
-            note.time > loopBeat - 0.1 &&
-            !triggeredNotesRef.current.has(note.id)
-          ) {
-            triggeredNotesRef.current.add(note.id);
-            // Translate beat duration to real seconds based on BPM
-            const durationSec = note.duration * (60 / tempo);
-            playNote(ctx, note.pitch, durationSec, instrument, Math.min(note.velocity, globalVelocity));
+          if (note.time >= TOTAL_BEATS) return;
+          const triggerKey = `${note.pitch}-${note.time}`;
+          const triggered = triggeredNotesRef.current.has(triggerKey);
+          const timeDiff = Math.abs(currentBeatAccurate - note.time);
+          const tolerance = Math.max(0.05, beatSec * 0.3);
+          
+          if (!triggered && timeDiff < tolerance) {
+            triggeredNotesRef.current.add(triggerKey);
+            playNote(
+              getAudioContext(),
+              note.pitch,
+              note.duration * beatSec,
+              instrument,
+              Math.min(note.velocity, globalVelocity)
+            );
           }
         });
 
@@ -138,7 +150,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      pausedOffsetRef.current = (currentBeat * 60) / tempo;
+      pausedOffsetRef.current = beatRef.current * (60 / tempo);
     }
 
     return () => {
@@ -146,9 +158,9 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPlaying, notes, tempo, instrument, globalVelocity, currentBeat]);
+  }, [isPlaying, notes, tempo, instrument, globalVelocity]);
 
-  const togglePlay = () => {
+  const togglePlay  const togglePlay = () => {
     getAudioContext(); // Resume context if suspended
     setIsPlaying(!isPlaying);
   };

@@ -11,6 +11,11 @@ import (
 	"github.com/ShowerBandV/text2midi/internal/composer"
 	"github.com/ShowerBandV/text2midi/internal/llm"
 	"github.com/ShowerBandV/text2midi/internal/midi"
+	"github.com/ShowerBandV/text2midi/internal/planner"
+	"github.com/ShowerBandV/text2midi/internal/phrase"
+	"github.com/ShowerBandV/text2midi/internal/arranger"
+	"github.com/ShowerBandV/text2midi/internal/critic"
+	"github.com/ShowerBandV/text2midi/internal/motif"
 	"github.com/ShowerBandV/text2midi/internal/musicdna"
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
