@@ -31,24 +31,26 @@ go test ./...
 
 ---
 
-## 架构总览
+## 核心架构
 
 ```
 用户文本 (Prompt)
    ↓
 LLM Agent (2 次调用)
    ├── ParseIntent → 风格/情绪/特征向量
-   └── PlanSong    → 和弦进行/调性/BPM
+   └── PlanSong    → 和弦/调性/BPM
    ↓
-MusicDNA Core
-   ├── Emotion Engine    → 情绪→音乐参数映射
-   ├── Motif Engine      → 动机展开 (A-A'-B-A)
-   ├── Song Composer     → 多轨编曲
-   ├── Humanizer         → 人性化 (velocity/timing drift)
-   └── MusicDNA Writer   → 结构化分析报告
+V2 作曲引擎 (Go 规则引擎, 0 LLM 调用)
+   ├── Planner     → 结构化 SongPlan（段落/能量/配器）
+   ├── Phrase      → 4-bar 乐句展开（风格感知）
+   ├── Composer    → 多轨编曲（bass/drums/lead/pad/fx）
+   ├── Arranger    → 编曲协调（音区冲突/密度控制）
+   ├── Critic      → 质量评估（4 维评分 + 重生成判断）
+   ├── Humanizer   → 人性化（velocity/timing drift）
+   └── MusicDNA    → 结构化分析报告
    ↓
 Post-processing
-   ├── MelodyGrammar     → 调性/音程约束
+   ├── MelodyGrammar   → 调性/音程约束
    ├── Transition Engine → 段落过渡
    ├── Dynamic Layering  → 乐器数量控制
    ├── Texture Layer     → 氛围铺底
@@ -59,52 +61,101 @@ MIDI → .mid 文件 + MusicDNA 分析
 
 **核心原则**：
 - LLM 只做高层决策（风格、情绪、和弦），所有编曲由 Go 规则引擎确定性执行
-- 不是"生成音乐再修修补补"，而是"从 DNA 生长出完整作品"
-- 每次生成附带 MusicDNA 结构化分析报告
+- 不是"生成 MIDI 再修修补补"，而是"先规划结构再生长出完整作品"
+- 每次生成附带 MusicDNA 分析报告（段落/和弦/动机/节奏/织体/情绪）
 
 ---
 
-## 核心系统
+## V2 架构详解
 
-### 1. Emotion Engine（情绪引擎）
+### 1. Planner（歌曲规划器）
 
-将自然语言情绪映射为 5 维音乐参数：
+决定歌曲的「骨架」—— 输入特征向量，输出结构化 SongPlan。
 
-| 维度 | 范围 | 作用 |
-|------|------|------|
-| **Tension** | 0-1 | 紧张度 → 和弦复杂度 |
-| **Energy** | 0-1 | 能量 → 节奏密度 |
-| **Warmth** | 0-1 | 温暖度 → 音色选择 |
-| **Stability** | 0-1 | 稳定度 → 动机重复率 |
-| **Brightness** | 0-1 | 明亮度 → 音区控制 |
+```
+输入:  feature_vector (darkness/energy/rhythmic/tension)
+输出:  SongPlan { BPM, Key, Sections[SectionPlan] }
 
-### 2. Motif Engine（动机引擎）
+每个 SectionPlan:
+  Name:     "intro" / "verse" / "chorus" / "bridge" / "outro"
+  Bars:     2 / 4 / 8
+  Energy:   0.2 / 0.5 / 0.9
+  Density:  0.2 / 0.5 / 0.8
+  Instruments: ["piano"] / ["drums", "bass", "lead"] / ["all"]
+  MotifMode: "sparse" / "partial" / "full" / "invert"
+```
 
-用 3-8 音的短动机，通过风格感知的句式展开全曲旋律：
+风格感知的段落布局：
 
-| 风格 | 句式 | 特征 |
-|------|------|------|
-| **Metal** | Riff 重复 + 八度下移 | 重复 riff, 最小变奏 |
-| **Pop** | A-A'-B-A | 动机→变奏→对比→回归 |
-| **Hip-hop** | Loop 循环 + 渐变 | 4 小节循环, 每轮微变 |
-| **Ambient** | 稀疏渐进 | 每乐句 +2 半音演进 |
+| 风格 | 触发条件 | 段落结构 |
+|------|---------|---------|
+| **Metal** | dark>0.7, energy>0.7 | intro(1) → verse(2) → chorus(4) → bridge(1) |
+| **Pop** | energy>0.4, rhythmic<0.5 | intro(2) → verse(4) → pre(2) → chorus(4) → bridge(2) → outro(2) |
+| **Hip-hop** | rhythmic>0.5, energy>0.3 | intro(1) → loop_a(3) → loop_b(3) → outro(1) |
+| **Ambient** | default | intro(2) → verse(4) → chorus(4) → outro(2) |
 
-5 种变奏方法：Transpose / Invert / Retrograde / Fragment / Extend。
+### 2. Phrase（乐句系统）
 
-### 3. Song Composer（作曲系统）
+音乐不是按 bar 生成的，是按 **phrase**（4 小节乐句）。
 
-从动机 + 和弦 + 情绪展开完整多轨编曲：
+```
+每个 phrase = 4 bars = question (bars 1-2) + answer (bars 3-4)
+```
+
+风格感知的句式：
+
+| 风格 | Bar 0 | Bar 1 | Bar 2 | Bar 3 |
+|------|-------|-------|-------|-------|
+| **Metal** | Riff | 八度下移 | Riff 重复 | 碎片+变奏 |
+| **Pop** | A (motif) | A' (+3 移调) | B (对比) | A (回归) |
+| **Hip-hop** | Loop | Loop | Loop | Loop (+3 变奏) |
+| **Ambient** | 2 音 | +2 移调 | +4 移调 | +6 移调 |
+
+### 3. Composer（作曲系统）
+
+从 Planner 的 SongPlan + Phrase 的乐句展开完整多轨编曲：
 
 ```
 Timeline Planner → 风格感知的段落结构
 Motif Allocation → 每段用哪种动机变体
-Drums Generator → 风格感知的鼓模式 (4 种)
-Bass Generator  → 风格感知的贝斯线 (metal/pop/hiphop/ambient)
-Pad Generator   → 风格感知的和弦铺底
-Humanizer       → velocity drift / timing drift / ghost note
+Drums Generator  → 风格感知的鼓模式 (4 种)
+Bass Generator   → 风格感知的贝斯线 (metal/pop/hiphop/ambient)
+Pad Generator    → 风格感知的和弦铺底
+Humanizer        → velocity drift / timing drift / ghost note
 ```
 
-### 4. Humanizer（人性化系统）
+### 4. Arranger（编曲协调器）
+
+确保各轨道不打架。
+
+检测以下冲突并自动修复：
+
+| 冲突类型 | 检测条件 | 修复方法 |
+|---------|---------|---------|
+| **音区冲突** | bass 和 lead 在同一中频区 | 贝斯降八度 |
+| **密度过载** | 单小节总音符 > 32 | 降低部分轨道力度 |
+| **空小节** | 没有任何音符 | 自动填充 |
+| **节奏冲突** | 鼓密集 + 旋律也密集 | 旋律简化 |
+
+### 5. Critic（质量评估器）
+
+生成后对音乐打分，低分触发重生成。
+
+```
+Score = repetition * 0.25 + tension * 0.2 + groove * 0.2 + climax * 0.2 + density * 0.15
+```
+
+| 维度 | 检测方法 | 意义 |
+|------|---------|------|
+| **Repetition** | 旋律中 3-note 模式重复次数 | 够不够"记得住" |
+| **Tension** | 各小节能量方差 | 有无起伏 |
+| **Groove** | 鼓 velocity 标准差 | 节奏有没有"味道" |
+| **Climax** | 后 1/3 与前 1/3 能量比 | 副歌够不够"炸" |
+| **Density** | 各小节音符数极差 | 段落对比够不够 |
+
+`if score.Total < 0.4 → 触发重生成`
+
+### 6. Humanizer（人性化系统）
 
 让 MIDI 听感更接近真人演奏：
 
@@ -113,24 +164,24 @@ Humanizer       → velocity drift / timing drift / ghost note
 - **Ghost Notes**: 弱拍随机添加极轻的幽灵音
 - **Accent Beat**: 每小节第一拍加重
 
-### 5. MusicDNA（结构化音乐分析）
+### 7. MusicDNA（结构化音乐分析）
 
-每首 MIDI 输出完整的分析报告：
+每首 MIDI 输出完整分析报告：
 
 ```
 ===== MusicDNA =====
---- Structure ---  bars 0-7, energy, density
---- Harmony ---    Key, chord progression per bar
---- Motif ---      Pattern (intervals), Score (repetition/contour/simplicity/rhythm)
---- Rhythm ---     density, swing, syncopation
---- Texture ---    track roles, note counts, avg pitch
---- Dynamics ---   velocity range, avg velocity
---- Emotion ---    tension, energy, warmth, stability, brightness
+--- Structure ---   段落：intro/verse/chorus, 能量/密度
+--- Harmony ---     调性 + 每小节和弦
+--- Motif ---       动机 interval pattern + 四项评分
+--- Rhythm ---      密度/swing/切分
+--- Texture ---     每轨音域/角色/音符数
+--- Dynamics ---    力度范围/平均值
+--- Emotion ---     tension/energy/warmth/stability/brightness
 ```
 
-### 6. ComposerDNA（作曲家人格）
+### 8. ComposerDNA（作曲家人格）
 
-8 种内置作曲家人格，影响动机重复率、混沌程度、声部交叉规则：
+8 种内置人格，影响动机重复率、混沌程度、声部交叉规则：
 
 | 人格 | MotifObsession | Chaos | 适用场景 |
 |------|----------------|-------|---------|
@@ -140,15 +191,27 @@ Humanizer       → velocity drift / timing drift / ghost note
 | **Hyperpop Maniac** | 0.40 | 0.90 | 实验 |
 | **Classical Purist** | 0.60 | 0.05 | 古典 |
 
-### 7. Motif Scoring（旋律质量评估）
+---
 
-四项加权评分，驱动生成决策：
+## 完整生成流程 (17 阶段)
 
-```
-Score = repetition * 0.4 + contour * 0.2 + simplicity * 0.2 + rhythm * 0.2
-```
-
-高分 → 多重复、少变化；低分 → 强变异、打破模式。
+| 阶段 | 模块 | 说明 |
+|------|------|------|
+| 1 | ParseIntent | LLM 解析文本 → 风格/情绪/特征向量 |
+| 2 | PlanSong | LLM 生成和弦 + 调性 + BPM |
+| 3 | **Planner** | 结构化 SongPlan（段落/能量/配器） |
+| 4 | **Phrase** | 4-bar 乐句展开（按风格选句式） |
+| 5 | Composer | 多轨编曲（bass/drums/lead/pad/fx） |
+| 6 | Humanizer | velocity/timing drift + ghost note |
+| 7 | **Arranger** | 编曲协调（音区冲突/密度控制） |
+| 8 | **Critic** | 质量评估（低分触发重生成） |
+| 9 | MusicDNA | 结构化分析报告 |
+| 10 | MelodyGrammar | 调性/音程约束 |
+| 11 | Transition Engine | 段落过渡 (6 种类型) |
+| 12 | Dynamic Layering | 乐器数量按能量控制 |
+| 13 | Texture Layer | 氛围铺底 |
+| 14 | Creative Chaos | 故意犯错 |
+| 15 | MIDI Render | .mid 文件 |
 
 ---
 
@@ -160,64 +223,47 @@ text2midi/
 │   ├── cmd/generate/main.go      CLI 生成器
 │   ├── internal/
 │   │   ├── agent/                LLM Agent (意图/和弦/配器)
-│   │   ├── composer/
-│   │   │   ├── emotion.go        Emotion Engine (情绪映射)
-│   │   │   ├── song.go           Song Composer + Section-aware
-│   │   │   ├── phrase.go         风格感知的句式生成
-│   │   │   ├── motif_engine.go   Motif Engine (变奏/展开)
-│   │   │   ├── humanizer.go      Humanizer (velocity/timing drift)
-│   │   │   ├── melody.go         MelodyGrammar (调性约束)
-│   │   │   ├── transition.go     Transition Engine (段落过渡)
-│   │   │   ├── dynamics.go       Dynamic Layering (乐器数量)
-│   │   │   ├── texture.go        Texture Layer (氛围铺底)
-│   │   │   ├── groove.go         Swing 量化 + 乐句呼吸
-│   │   │   ├── energy.go         能量曲线 + Bass-Kick 对齐
-│   │   │   ├── stems.go          Stem 分轨导出
+│   │   ├── planner/              V2: 歌曲规划器 (SongPlan)
+│   │   ├── phrase/               V2: 乐句系统 (4-bar 句式)
+│   │   ├── arranger/             V2: 编曲协调器 (冲突检测)
+│   │   ├── critic/               V2: 质量评估器 (4 维评分)
+│   │   │
+│   │   ├── composer/             作曲引擎
+│   │   │   ├── song.go           Song Composer
+│   │   │   ├── emotion.go        Emotion Engine
+│   │   │   ├── motif_engine.go   Motif Engine
+│   │   │   ├── humanizer.go      Humanizer
+│   │   │   ├── phrase.go         风格感知句式
+│   │   │   ├── melody.go         MelodyGrammar
+│   │   │   ├── transition.go     Transition Engine
+│   │   │   ├── dynamics.go       Dynamic Layering
+│   │   │   ├── texture.go        Texture Layer
+│   │   │   ├── groove.go         Swing 量化
+│   │   │   ├── energy.go         能量曲线
+│   │   │   ├── stems.go          Stem 导出
 │   │   │   ├── substitution.go   和弦代换
 │   │   │   └── dna.go            ComposerDNA + SongMemory
-│   │   ├── musicdna/
+│   │   │
+│   │   ├── musicdna/             结构化音乐分析
 │   │   │   ├── types.go          MusicDNA 数据模型
-│   │   │   └── extractor.go      MIDI→DNA 提取器 (segmenter/chord/motif)
+│   │   │   └── extractor.go      MIDI→DNA 提取器
+│   │   │
 │   │   ├── generator/            规则乐器生成器
-│   │   ├── llm/                  Prompt 模板 + LLM 客户端
+│   │   ├── llm/                  Prompt 模板
 │   │   ├── midi/                 原生 SMF Type 1 写入器
 │   │   ├── music/                乐理工具
 │   │   ├── mutation/             Creative Chaos
-│   │   ├── schema/               核心数据类型
-│   │   └── style/                风格数据库 + 配器模板
+│   │   ├── schema/               数据类型
+│   │   └── style/                风格数据库
 │   │
-│   ├── 编曲方法/                  编曲知识库 (流行/摇滚/说唱)
-│   └── midi_output/              已生成 MIDI 文件
+│   ├── 编曲方法/                  编曲知识库
+│   └── midi_output/              已生成 MIDI
 │
 ├── frontend/index.html           Web 界面
-├── ROADMAP.md                    7 阶段路线图
-├── HARDCODED.md                  硬编码审计清单
+├── ROADMAP.md                    路线图
+├── HARDCODED.md                  硬编码审计
 └── TODO.md                       当前待办
 ```
-
----
-
-## 生成流程 (17 阶段)
-
-| 阶段 | 模块 | 说明 |
-|------|------|------|
-| 1 | ParseIntent | LLM 解析文本 → 风格/情绪/特征向量 |
-| 2 | PlanSong | LLM 生成和弦 + 调性 + BPM |
-| 3 | EmotionEngine | 情绪 → Tension/Energy/Warmth/Stability/Brightness |
-| 4 | Timeline Planner | 风格感知的段落结构 |
-| 5 | Motif Engine | 动机变奏展开 (按风格选句式) |
-| 6 | Bass Generator | 风格感知贝斯线 |
-| 7 | Drums Generator | 风格感知鼓模式 |
-| 8 | Lead Melody | 动机展开 + 人性化 |
-| 9 | Pad Generator | 和弦铺底 |
-| 10 | Humanizer | velocity/timing drift + ghost note |
-| 11 | Transition Engine | 段落过渡 (6 种类型) |
-| 12 | Dynamic Layering | 乐器数量按能量控制 |
-| 13 | Texture Layer | 氛围铺底 |
-| 14 | MelodyGrammar | 调性/音程几何约束 |
-| 15 | Creative Chaos | 故意犯错 |
-| 16 | MusicDNA Extractor | 结构化分析 |
-| 17 | MIDI Render | .mid 文件 |
 
 ---
 
@@ -225,7 +271,7 @@ text2midi/
 
 - **语言**: Go 1.22+
 - **LLM**: OpenAI 兼容 API (默认 DeepSeek)
-- **MIDI**: 原生写入, 零外部依赖
+- **MIDI**: 原生写入，零外部依赖
 - **前端**: 纯 HTML/JS (无框架)
 
 ## License
