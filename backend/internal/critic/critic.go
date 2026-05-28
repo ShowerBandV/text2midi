@@ -254,9 +254,17 @@ func (s *MusicScore) NeedsRegeneration() bool {
 }
 
 // Repair applies automated fixes when quality is low.
-// Returns true if any repairs were made.
-func Repair(eventsByTrack map[string][]schema.NoteEvent, score *MusicScore, totalBars int) bool {
-	repaired := false
+// Returns true if repairs were made + a recommendation for full regeneration.
+// regeneration=true means the caller should re-run composition with adjusted params.
+func Repair(eventsByTrack map[string][]schema.NoteEvent, score *MusicScore, totalBars int, bpm int) (repaired bool, regeneration bool) {
+	repaired = false
+
+	if score.Total < 0.3 {
+		// Very low total score: recommend full regeneration.
+		regeneration = true
+		fmt.Print("[Critic] warn: total score < 0.3, recommend regeneration\n")
+		return repaired, regeneration
+	}
 
 	if score.Climax < 0.5 {
 		// Boost energy in last third of the song.
@@ -307,7 +315,12 @@ func Repair(eventsByTrack map[string][]schema.NoteEvent, score *MusicScore, tota
 		fmt.Print("[Critic] warn: density too uniform\n")
 	}
 
-	return repaired
+	return repaired, regeneration
+}
+
+// ShouldRegenerate returns true if the score is low enough to warrant regeneration.
+func ShouldRegenerate(score *MusicScore) bool {
+	return score.Total < 0.35
 }
 
 func getTrack(m map[string][]schema.NoteEvent, ids ...string) []schema.NoteEvent {

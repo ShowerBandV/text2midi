@@ -21,6 +21,7 @@ func main() {
 	prompt := flag.String("prompt", "", "Music description")
 	styleName := flag.String("style", "trap", "Style")
 	bpm := flag.Int("bpm", 140, "BPM")
+	flag.Int64("seed", 0, "Random seed (0=random)")
 	flag.String("key", "C minor", "Key")
 	bars := flag.Int("bars", 8, "Bars")
 	out := flag.String("out", "./midi_output", "Output dir")
@@ -181,7 +182,9 @@ func main() {
 
 	// --- V2 Critic ---
 	musicScore := critic.Evaluate(evMap, plan.TotalBars)
-	critic.Repair(evMap, musicScore, plan.TotalBars)
+	if repaired, regen := critic.Repair(evMap, musicScore, plan.TotalBars, plan.BPM); repaired || regen {
+		fmt.Printf("  Critic: repaired=%t regen=%t score=%.2f\n", repaired, regen, musicScore.Total)
+	}
 
 	agent.GenerateChordPad(plan, evMap)
 
@@ -245,7 +248,9 @@ func main() {
 		Tracks: tracks,
 	}
 
-	// --- Stem export disabled ---
+	// --- Stem export ---
+	os.MkdirAll(outputPath+"/../stems", 0755)
+	composer.ExportStems(midiIR, outputPath+"/../stems", name, nil)
 
 	result, err := midi.RenderMIDI(midiIR, outputPath, nil)
 	if err != nil {
