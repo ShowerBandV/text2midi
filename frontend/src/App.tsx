@@ -256,9 +256,9 @@ export default function App() {
         )}
 
         {/* Dynamic Route views Render Switch */}
-        <div className="w-full px-lg" >
+        <div className="w-full px-lg h-full overflow-hidden">
           {activeTab === "generate" && (
-            <div className="flex flex-col gap-14">
+            <div className="flex flex-col gap-14 h-full overflow-y-auto">
               
               {/* Giant Display header and subtitle */}
               <div className="flex flex-col items-center text-center gap-lg mt-8 select-none">
