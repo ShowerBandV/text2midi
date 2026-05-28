@@ -267,18 +267,17 @@ func GenerateBass(chords []string, timeline *Timeline, darkness, energy, rhythmi
 func GeneratePad(chords []string, timeline *Timeline, darkness, energy, rhythmic, tension float64) []schema.NoteEvent {
 	var events []schema.NoteEvent
 	isMetal := darkness > 0.7 && energy > 0.7
-	_ = isMetal
+	isSlow := energy < 0.4 && rhythmic < 0.4
 	isPop := energy > 0.4 && rhythmic < 0.5
 
-	// Metal: no pad, it doesn't fit
 	if isMetal {
 		return events
 	}
 
 	for _, sec := range timeline.Sections {
-		if sec.Energy < 0.3 && !isPop {
+		if sec.Energy < 0.2 && !isPop {
 			continue
-		} // skip pad in low-energy non-pop
+		}
 		energyFactor := 0.3 + sec.Energy*0.7
 
 		for bar := sec.StartBar; bar < sec.EndBar; bar++ {
@@ -286,13 +285,18 @@ func GeneratePad(chords []string, timeline *Timeline, darkness, energy, rhythmic
 			base := float64(bar) * 4.0
 			cp := chordPitchesForChord(chord, 3)
 
-			if isPop && len(cp) >= 3 {
-				// Pop: wide open voicing (root 5th octave)
+			if isSlow && len(cp) >= 3 {
+				// Ballad: arpeggiated broken chords (彩虹-like)
+				pat := []int{cp[0], cp[1], cp[2], cp[1], cp[0] + 12, cp[2], cp[1], cp[0]}
+				for i, p := range pat {
+					events = append(events, schema.NoteEvent{Type: "note", Pitch: p,
+						StartBeat: base + float64(i)*0.5, DurationBeat: 0.4, Velocity: 35 + int(energyFactor*25)})
+				}
+			} else if isPop && len(cp) >= 3 {
 				events = append(events, schema.NoteEvent{Type: "note", Pitch: cp[0], StartBeat: base, DurationBeat: 4.0, Velocity: 25 + int(energyFactor*25)})
 				events = append(events, schema.NoteEvent{Type: "note", Pitch: cp[2], StartBeat: base, DurationBeat: 4.0, Velocity: 25 + int(energyFactor*25)})
 				events = append(events, schema.NoteEvent{Type: "note", Pitch: cp[0] + 12, StartBeat: base, DurationBeat: 4.0, Velocity: 20 + int(energyFactor*20)})
 			} else {
-				// Default: close voicing
 				for _, p := range cp {
 					events = append(events, schema.NoteEvent{Type: "note", Pitch: p,
 						StartBeat: base, DurationBeat: 4.0, Velocity: 30 + int(energyFactor*30)})

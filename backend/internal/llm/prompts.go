@@ -614,6 +614,9 @@ Rules:
 // This is for the "llm" note generation mode (future use; currently rule-based).
 func BuildTrackNoteGeneratorPrompt(songPlanStr, trackJSON string) string {
 	return fmt.Sprintf(`You are a professional music producer generating note events for a single instrument track.
+
+%s
+
 Use the note generation knowledge above as your PRIMARY DECISION GUIDE.
 
 Input song_plan: %s
@@ -638,7 +641,7 @@ Output EXACTLY this JSON shape, nothing else:
   "events": [
     {"type":"note","pitch":60,"start_beat":0.0,"duration_beat":0.5,"velocity":96}
   ]
-}`, songPlanStr, trackJSON)
+}`, noteKnowledge, songPlanStr, trackJSON)
 }
 
 // BuildNoteSequencePrompt builds a prompt for direct note-level generation.
