@@ -6,15 +6,11 @@ import { MidiNote, InstrumentType, MidiTrack, MidiMetadata } from "./types";
 import {
   Sparkles,
   Music,
-  ArrowRight,
   Brain,
   Sliders,
   Layers,
-  ArrowUpRight,
   Mic,
-  Volume2,
-  Check,
-  Disc2
+  Volume2
 } from "lucide-react";
 
 // Pre-defined initial template tracks to make the application fully functional out of the box!
