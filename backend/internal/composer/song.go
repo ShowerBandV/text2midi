@@ -267,6 +267,7 @@ func GenerateBass(chords []string, timeline *Timeline, darkness, energy, rhythmi
 func GeneratePad(chords []string, timeline *Timeline, darkness, energy, rhythmic, tension float64) []schema.NoteEvent {
 	var events []schema.NoteEvent
 	isMetal := darkness > 0.7 && energy > 0.7
+	_ = isMetal
 	isPop := energy > 0.4 && rhythmic < 0.5
 
 	// Metal: no pad, it doesn't fit

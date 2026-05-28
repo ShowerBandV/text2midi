@@ -137,15 +137,7 @@ func main() {
 		[]string{"intro", "verse", "chorus", "bridge", "outro"}, plan.TotalBars)
 	_, _ = emotion, curve
 
-	// Extract motif from lead melody for SongComposer.
-	// Use the song planner's chord progression.
-	chordStrs := make([]string, len(plan.ChordProgression))
-	for i, cp := range plan.ChordProgression {
-		chordStrs[i] = cp.Chord
-	}
-	if len(chordStrs) == 0 {
-		chordStrs = []string{"C", "G", "Am", "F"}
-	}
+	// Use template harmony if available, else use song planner.
 
 	basePitch := 60
 	if plan.Key.Root == "C" || plan.Key.Root == "A" {
@@ -159,18 +151,37 @@ func main() {
 	}
 
 	motif := []int{0, 2, 4, 3, 0} // fallback
+	templateHarmony := []string{} // harmony from matched template
+
 	// --- MusicDNA Template Lookup ---
 	templateLib := musicdna.NewTemplateDB("./templates")
 	if templates, err := templateLib.FindByStyle(*styleName); err == nil && len(templates) > 0 {
 		for _, t := range templates {
 			if len(t.DNA.Motif.Pattern) > 1 {
 				motif = t.DNA.Motif.Pattern
-				fmt.Printf("  Template: %s motif=%v", t.Name, motif)
+				// Extract harmony progression from template.
+				for _, cb := range t.DNA.Harmony.Progression {
+					templateHarmony = append(templateHarmony, cb.Chord)
+				}
+				fmt.Printf("  Template: %s motif=%v chords=%v\n", t.Name, motif, templateHarmony)
 				break
 			}
 		}
 	}
 
+	chordStrs := templateHarmony
+	if len(chordStrs) > plan.TotalBars {
+		chordStrs = chordStrs[:plan.TotalBars] // trim to current song length
+	}
+	if len(chordStrs) == 0 {
+		chordStrs = make([]string, len(plan.ChordProgression))
+		for i, cp := range plan.ChordProgression {
+			chordStrs[i] = cp.Chord
+		}
+	}
+	if len(chordStrs) == 0 {
+		chordStrs = []string{"C", "G", "Am", "F"}
+	}
 	// Style-aware motif derived from feature vector.
 	// High energy + high rhythmic → aggressive intervals (fourths, fifths).
 	// Low energy + high lofi → stepwise motion, narrow range.

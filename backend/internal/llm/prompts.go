@@ -613,31 +613,32 @@ Rules:
 // BuildTrackNoteGeneratorPrompt builds the prompt for per-track note generation.
 // This is for the "llm" note generation mode (future use; currently rule-based).
 func BuildTrackNoteGeneratorPrompt(songPlanStr, trackJSON string) string {
-	return fmt.Sprintf(`You are a MIDI note event generator.
-Return JSON only. No markdown, no explanations.
+	return fmt.Sprintf(`You are a professional music producer generating note events for a single instrument track.
+Use the note generation knowledge above as your PRIMARY DECISION GUIDE.
 
 Input song_plan: %s
 Input track: %s
 
-Note generation knowledge:
-%s
+ROLE-SPECIFIC RULES:
+- If role is bass: play chord roots on strong beats, use octave jumps, stay in MIDI 28-48.
+- If role is chords: play full triad at chord changes, arpeggiated or block voicing, MIDI 48-72.
+- If role is pad: sustain long notes, overlap chord tones, MIDI 48-72.
+- If role is lead: SINGABLE melody, stepwise motion, varied phrasing, MIDI 60-84.
+- If role is drums: GM drum map (kick=36, snare=38, hi-hat=42), lock with tempo.
 
-Output format (exact):
+CRITICAL:
+- Derive notes from the active chord at each beat/bar.
+- Vary durations: mix short(0.125) medium(0.5-0.75) long(1.0-2.0).
+- Use RESTS. Leave 20-40%% empty space. Do NOT fill every beat.
+- End phrases with cadence. Make loop endings lead naturally back to beginning.
+- Avoid all tracks using same rhythmic density simultaneously.
+
+Output EXACTLY this JSON shape, nothing else:
 {
   "events": [
     {"type":"note","pitch":60,"start_beat":0.0,"duration_beat":0.5,"velocity":96}
   ]
-}
-
-Constraints:
-- 0 <= pitch <= 127
-- 1 <= velocity <= 127
-- start_beat >= 0
-- duration_beat > 0
-- start_beat + duration_beat <= total_beats
-- Keep style coherence with song_plan and track.style.
-- Generate fresh musical content for this run.
-- Output key must be exactly "events".`, songPlanStr, trackJSON, noteKnowledge)
+}`, songPlanStr, trackJSON)
 }
 
 // BuildNoteSequencePrompt builds a prompt for direct note-level generation.
