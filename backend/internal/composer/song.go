@@ -301,44 +301,77 @@ func ExpandMelody(phrases []Phrase, basePitch, bpm int, darkness, energy, rhythm
 
 // ─── Song Composer (final, no hardcoded values) ─────────────────
 
+// ComposeSong is the legacy wrapper. Use ComposeSongWithContext for new code.
 func ComposeSong(motif []int, chords []string, totalBars, basePitch, bpm int,
 	rng *rand.Rand, darkness, energy, rhythmic, tension float64) map[string][]schema.NoteEvent {
+	ctx := &GenerationContext{
+		Motif: motif, Chords: chords, TotalBars: totalBars,
+		BasePitch: basePitch, BPM: bpm, RNG: rng,
+		Darkness: darkness, Energy: energy, Rhythmic: rhythmic, Tension: tension,
+		DNA: DefaultDNA(),
+	}
+	return ComposeSongWithContext(ctx)
+}
 
+// ComposeSongWithContext is the DNA-aware composition entry point.
+func ComposeSongWithContext(ctx *GenerationContext) map[string][]schema.NoteEvent {
 	evMap := make(map[string][]schema.NoteEvent)
-	if len(motif) < 2 { motif = []int{0, 2, 4, 3, 0} }
+	if len(ctx.Motif) < 2 {
+		ctx.Motif = []int{0, 2, 4, 3, 0}
+	}
+	if len(ctx.Chords) == 0 {
+		ctx.Chords = []string{"C", "G", "Am", "F"}
+	}
+	if ctx.RNG == nil {
+		ctx.RNG = rand.New(rand.NewSource(42))
+	}
+	if ctx.DNA == nil {
+		ctx.DNA = DefaultDNA()
+	}
 
 	// Step 1: Style-aware section lengths
-	sd := sectionDefsForStyle(darkness, energy, rhythmic, tension)
-	timeline := BuildTimeline(sd, totalBars)
-	fmt.Printf("[SongComposer] %s, %d sections, %d bars\n", styleLabel(darkness, energy, rhythmic), len(timeline.Sections), timeline.TotalBars)
+	sd := sectionDefsForStyle(ctx.Darkness, ctx.Energy, ctx.Rhythmic, ctx.Tension)
+	timeline := BuildTimeline(sd, ctx.TotalBars)
+	label := ctx.StyleLabel()
+	fmt.Printf("[SongComposer] %s, %d sections, %d bars (DNA=%s)\n",
+		label, len(timeline.Sections), ctx.TotalBars, ctx.DNA.Name)
 
-	// Step 2: Bass (style-aware)
-	if len(chords) == 0 { chords = []string{"C", "G", "Am", "F"} }
-	evMap["bass"] = GenerateBass(chords, timeline, darkness, energy, rhythmic, tension)
+	// Step 2: Bass (DNA-aware)
+	evMap["bass"] = GenerateBass(ctx.Chords, timeline, ctx.Darkness, ctx.Energy, ctx.Rhythmic, ctx.Tension)
 	fmt.Printf("[Bass] %d events\n", len(evMap["bass"]))
 
-	// Step 3: Drums (style-aware)
-	evMap["drums"] = GenerateDrums(timeline, darkness, energy, rhythmic, tension)
+	// Step 3: Drums (DNA-aware)
+	evMap["drums"] = GenerateDrums(timeline, ctx.Darkness, ctx.Energy, ctx.Rhythmic, ctx.Tension)
 	fmt.Printf("[Drums] %d events\n", len(evMap["drums"]))
 
-	// Step 4: Lead melody from motif (style-aware expansion)
-	if rng == nil { rng = rand.New(rand.NewSource(42)) }
+	// Step 4: Lead melody from motif (DNA-aware expansion)
+	useRate := ctx.MotifUseRate()
+	varLevel := 1.0 - useRate
+	if varLevel < 0.2 {
+		varLevel = 0.2
+	}
 	plan := MotifPlan{
-		UseRate: 0.7, VariationLevel: 0.4, CallResponse: true,
-		OctaveStrategy: "chorus_up", BarsPerPhrase: 4, TotalBars: totalBars,
+		UseRate:        useRate,
+		VariationLevel: varLevel,
+		CallResponse:   true,
+		OctaveStrategy: "chorus_up",
+		BarsPerPhrase:  4,
+		TotalBars:      ctx.TotalBars,
 	}
 	var allPhrases []Phrase
-	style := styleLabel(darkness, energy, rhythmic)
+	style := ctx.StyleLabel()
 	for _, sec := range timeline.Sections {
-		motifVar := ApplyMotif(motif, sec.MotifMode)
-		phrases := BuildSection(motifVar, sec.Name, sec.Bars, plan, rng, style)
+		motifVar := ApplyMotif(ctx.Motif, sec.MotifMode)
+		phrases := BuildSection(motifVar, sec.Name, sec.Bars, plan, ctx.RNG, style)
 		allPhrases = append(allPhrases, phrases...)
 	}
-	evMap["lead"] = ExpandMelody(allPhrases, basePitch, bpm, darkness, energy, rhythmic, tension)
-	fmt.Printf("[Lead] %d notes from %d-note motif\n", len(evMap["lead"]), len(motif))
+	evMap["lead"] = ExpandMelody(allPhrases, ctx.BasePitch, ctx.BPM,
+		ctx.Darkness, ctx.Energy, ctx.Rhythmic, ctx.Tension)
+	fmt.Printf("[Lead] %d notes from %d-note motif (useRate=%.2f)\n",
+		len(evMap["lead"]), len(ctx.Motif), useRate)
 
-	// Step 5: Pad (style-aware)
-	evMap["pad"] = GeneratePad(chords, timeline, darkness, energy, rhythmic, tension)
+	// Step 5: Pad (DNA-aware)
+	evMap["pad"] = GeneratePad(ctx.Chords, timeline, ctx.Darkness, ctx.Energy, ctx.Rhythmic, ctx.Tension)
 	fmt.Printf("[Pad] %d events\n", len(evMap["pad"]))
 
 	fmt.Printf("[SongComposer] done: %d tracks\n", len(evMap))
