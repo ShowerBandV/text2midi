@@ -1,0 +1,10 @@
+# Compiled binaries
+server.exe
+generate.exe
+dnascan.exe
+*.exe
+
+# Generated output
+generated/
+dna_library/
+midi_output/

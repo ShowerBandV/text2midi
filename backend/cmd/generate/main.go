@@ -1,17 +1,17 @@
 package main
 
 import (
-		"math/rand"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"time"
 
 	"github.com/ShowerBandV/text2midi/internal/agent"
 	"github.com/ShowerBandV/text2midi/internal/composer"
-	"github.com/ShowerBandV/text2midi/internal/musicdna"
-			"github.com/ShowerBandV/text2midi/internal/llm"
+	"github.com/ShowerBandV/text2midi/internal/llm"
 	"github.com/ShowerBandV/text2midi/internal/midi"
+	"github.com/ShowerBandV/text2midi/internal/musicdna"
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
@@ -56,13 +56,27 @@ func main() {
 	intentMap, _ := intentRes["intent"].(map[string]any)
 	if fvRaw, ok := intentMap["feature_vector"]; ok {
 		if fvMap, ok := fvRaw.(map[string]any); ok {
-			if d, ok := fvMap["darkness"]; ok { plan.FeatureVector.Darkness = toFloat(d) }
-			if e, ok := fvMap["energy"]; ok { plan.FeatureVector.Energy = toFloat(e) }
-			if a, ok := fvMap["acousticness"]; ok { plan.FeatureVector.Acousticness = toFloat(a) }
-			if d, ok := fvMap["density"]; ok { plan.FeatureVector.Density = toFloat(d) }
-			if r, ok := fvMap["rhythmic_complexity"]; ok { plan.FeatureVector.RhythmicComplexity = toFloat(r) }
-			if t, ok := fvMap["tension"]; ok { plan.FeatureVector.Tension = toFloat(t) }
-			if l, ok := fvMap["lo_fi"]; ok { plan.FeatureVector.LoFi = toFloat(l) }
+			if d, ok := fvMap["darkness"]; ok {
+				plan.FeatureVector.Darkness = toFloat(d)
+			}
+			if e, ok := fvMap["energy"]; ok {
+				plan.FeatureVector.Energy = toFloat(e)
+			}
+			if a, ok := fvMap["acousticness"]; ok {
+				plan.FeatureVector.Acousticness = toFloat(a)
+			}
+			if d, ok := fvMap["density"]; ok {
+				plan.FeatureVector.Density = toFloat(d)
+			}
+			if r, ok := fvMap["rhythmic_complexity"]; ok {
+				plan.FeatureVector.RhythmicComplexity = toFloat(r)
+			}
+			if t, ok := fvMap["tension"]; ok {
+				plan.FeatureVector.Tension = toFloat(t)
+			}
+			if l, ok := fvMap["lo_fi"]; ok {
+				plan.FeatureVector.LoFi = toFloat(l)
+			}
 		}
 	}
 
@@ -81,9 +95,8 @@ func main() {
 	fmt.Printf("  Composer: %s", composerDNA.Name)
 	// --- SongMemory: track motif and section info ---
 
-
 	// Enable/disable post-processing based on DNA.
-		if *bpm > 0 {
+	if *bpm > 0 {
 		plan.BPM = *bpm
 	}
 	if *bars > 0 {
@@ -100,8 +113,8 @@ func main() {
 	// --- SongComposer: emotion-driven full composition ---
 	emotion := composer.DetectEmotionFromLLM(mood)
 	curve := composer.BuildEmotionCurve(composer.DefaultEmotions(),
-		map[string]int{"intro":2,"verse":4,"chorus":4,"bridge":2,"outro":2},
-		[]string{"intro","verse","chorus","bridge","outro"}, plan.TotalBars)
+		map[string]int{"intro": 2, "verse": 4, "chorus": 4, "bridge": 2, "outro": 2},
+		[]string{"intro", "verse", "chorus", "bridge", "outro"}, plan.TotalBars)
 	_, _ = emotion, curve
 
 	// Extract motif from lead melody for SongComposer.
@@ -147,7 +160,7 @@ func main() {
 	for _, at := range arr.Tracks {
 		if at.ID == "distorted_guitar" || at.ID == "rhythm_guitar" {
 			if _, exists := evMap["rhythm_guitar"]; !exists {
-					}
+			}
 		}
 	}
 
@@ -198,7 +211,7 @@ func main() {
 	midiIR := schema.MidiIR{
 		Meta: schema.Meta{
 			TicksPerBeat: 480,
-			BPM:         plan.BPM,
+			BPM:          plan.BPM,
 		},
 		Tracks: tracks,
 	}

@@ -448,6 +448,4 @@ func lookupEvents(eventsByTrack map[string][]schema.NoteEvent, id, role string) 
 	return []schema.NoteEvent{}
 }
 
-func init() {
-	os.MkdirAll("./generated", 0755)
-}
+
