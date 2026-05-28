@@ -406,7 +406,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
         {/* Piano Roll Area Grid */}
         <section className="flex-grow flex overflow-hidden relative bg-[#0a0a0a]">
           {/* Vertical C3-C5 Piano Keys Controller Column */}
-          <div ref={pianoKeysRef} onScroll={handleKeysScroll} className="w-16 flex-1 bg-surface-container-low flex flex-col border-r border-white/10 overflow-y-auto scrollbar-none" id="piano-keys">
+          <div ref={pianoKeysRef} onScroll={handleKeysScroll} className="w-16 bg-surface-container-low flex flex-col border-r border-white/10 overflow-y-auto scrollbar-none flex-shrink-0" id="piano-keys">
             {PIANO_ROWS.map((pitch) => (
               <div
                 key={pitch}
