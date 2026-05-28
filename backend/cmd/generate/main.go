@@ -255,6 +255,10 @@ func main() {
 
 	// --- MusicDNA extraction ---
 	extractor := musicdna.NewExtractor()
+	// --- MusicDNA Template Library ---
+	templateLib := musicdna.NewLibrary("./templates")
+	templateLib.FromMIDI(evMap, plan.TotalBars, plan.Key.Root+" "+plan.Key.Mode,
+		*styleName, plan.Title, *prompt)
 	dna := extractor.Extract(evMap, plan.TotalBars, plan.Key.Root+" "+plan.Key.Mode)
 	fmt.Println(dna.Print())
 
