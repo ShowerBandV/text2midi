@@ -60,6 +60,7 @@ const scrollSyncLock = useRef(false);
   const pausedOffsetRef = useRef<number>(0);
   const triggeredNotesRef = useRef<Set<string>>(new Set());
 const beatRef = useRef(0);
+const playheadRef = useRef<HTMLDivElement | null>(null);
 
   // Bidirectional scroll sync between pitch keys and grid canvas
 const handleGridScroll = () => {
@@ -96,10 +97,11 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
     return audioCtxRef.current;
   };
 
-  // Run visualizer playhead loop synchronized with the precision Web Audio timeline
+  // Optimized playback: direct DOM playhead, no React re-render per frame
   useEffect(() => {
     if (isPlaying) {
       startTimeRef.current = performance.now() / 1000 - pausedOffsetRef.current;
+      let lastDisplayBeat = -1;
       
       const tick = () => {
         const nowSec = performance.now() / 1000;
@@ -108,18 +110,27 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
         const rawBeat = elapsedSec * beatsPerSec;
         const loopBeat = rawBeat % TOTAL_BEATS;
 
-        // Update ref immediately (always accurate, no re-render)
         beatRef.current = loopBeat;
 
-        // Reset trigger memory if we looped
-        if (loopBeat < beatRef.current - 1) {
+        // Reset trigger memory on loop
+        if (loopBeat < 1 && lastDisplayBeat > TOTAL_BEATS - 2) {
           triggeredNotesRef.current.clear();
         }
 
-        // Only update React state for display (throttled by rAF is fine)
-        setCurrentBeat(loopBeat);
+        // Move playhead via direct DOM (no React re-render)
+        if (playheadRef.current) {
+          const playheadX = (loopBeat / 0.5) * COLUMN_WIDTH;
+          playheadRef.current.style.left = playheadX + 'px';
+        }
 
-        // Sound Engine Player Scheduler - use ref for accurate timing
+        // Only update React state when beat display changes (not every frame)
+        const displayBeat = Math.round(loopBeat * 10) / 10;
+        if (Math.abs(displayBeat - lastDisplayBeat) > 0.05) {
+          lastDisplayBeat = displayBeat;
+          setCurrentBeat(loopBeat);
+        }
+
+        // Sound Engine - use beatRef for accurate timing
         const beatSec = 60 / tempo;
         const currentBeatAccurate = beatRef.current;
         
@@ -420,8 +431,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
             
             {/* Playhead Line Indicator Component */}
             <div
-              className="absolute top-0 bottom-0 w-[2px] bg-secondary z-30 shadow-[0_0_12px_rgba(93,230,255,0.8)] pointer-events-none "
-              style={{ left: `${(currentBeat / 0.5) * COLUMN_WIDTH}px` }}
+              ref={playheadRef} className="absolute top-0 bottom-0 w-[2px] bg-secondary z-30 shadow-[0_0_12px_rgba(93,230,255,0.8)] pointer-events-none "
             />
 
             {/* Note events coordinate render layer */}
