@@ -260,7 +260,7 @@ export default function App() {
         )}
 
         {/* Dynamic Route views Render Switch */}
-        <div className="max-w-7xl mx-auto px-lg">
+        <div className="w-full px-lg">
           {activeTab === "generate" && (
             <div className="flex flex-col gap-14">
               
@@ -457,7 +457,7 @@ export default function App() {
 
       {/* Shared site Footer */}
       <footer className="w-full py-lg mt-auto bg-surface-container-lowest border-t border-white/5 select-none">
-        <div className="flex flex-col md:flex-row justify-between items-center px-lg max-w-7xl mx-auto gap-md text-xs">
+        <div className="flex flex-col md:flex-row justify-between items-center px-lg w-full gap-md text-xs">
           <div className="flex flex-col items-center md:items-start gap-1">
             <div className="font-display font-extrabold text-base bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
               MidiMind AI
