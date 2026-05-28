@@ -224,7 +224,7 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen bg-[#121212] flex flex-col font-sans text-on-background overflow-hidden Selection:bg-primary-container Selection:text-on-primary-container">
+    <div className="h-screen bg-[#121212] flex flex-col font-sans text-on-background overflow-hidden gap-2 Selection:bg-primary-container Selection:text-on-primary-container">
       {/* Dynamic atmospheric glowing canvas nodes */}
       <div className="absolute inset-x-0 top-0 h-[600px] hero-gradient pointer-events-none -z-10" />
       <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-primary/8 blur-[130px] rounded-full -z-10 pointer-events-none" />
