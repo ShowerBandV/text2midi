@@ -67,11 +67,14 @@ const handleGridScroll = () => {
   }
   scrollSyncLock.current = false;
 };
-// Scroll grid when user wheels on pitch keys area
-const handleKeysWheel = (e: React.WheelEvent) => {
-  if (pianoCanvasRef.current) {
-    pianoCanvasRef.current.scrollTop += e.deltaY;
+// Sync grid when pitch keys scroll natively
+const handleKeysScroll = () => {
+  if (scrollSyncLock.current) return;
+  scrollSyncLock.current = true;
+  if (pianoKeysRef.current && pianoCanvasRef.current) {
+    pianoCanvasRef.current.scrollTop = pianoKeysRef.current.scrollTop;
   }
+  scrollSyncLock.current = false;
 };
 
 const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
@@ -378,7 +381,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
         {/* Piano Roll Area Grid */}
         <section className="flex-grow flex overflow-hidden relative bg-[#0a0a0a]">
           {/* Vertical C3-C5 Piano Keys Controller Column */}
-          <div ref={pianoKeysRef} onWheel={handleKeysWheel} className="w-16 flex-1 bg-surface-container-low flex flex-col border-r border-white/10 overflow-hidden" id="piano-keys">
+          <div ref={pianoKeysRef} onScroll={handleKeysScroll} className="w-16 flex-1 bg-surface-container-low flex flex-col border-r border-white/10 overflow-y-auto scrollbar-none" id="piano-keys">
             {PIANO_ROWS.map((pitch) => (
               <div
                 key={pitch}

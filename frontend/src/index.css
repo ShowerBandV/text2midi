@@ -138,6 +138,15 @@ body {
 .max-w-6xl { max-width: 72rem; }
 .max-w-7xl { max-width: 80rem; }
 
+/* Hide scrollbar but keep functionality */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
