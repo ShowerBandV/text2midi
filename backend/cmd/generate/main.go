@@ -11,8 +11,6 @@ import (
 	"github.com/ShowerBandV/text2midi/internal/composer"
 	"github.com/ShowerBandV/text2midi/internal/llm"
 	"github.com/ShowerBandV/text2midi/internal/midi"
-	"github.com/ShowerBandV/text2midi/internal/arranger"
-	"github.com/ShowerBandV/text2midi/internal/critic"
 	"github.com/ShowerBandV/text2midi/internal/musicdna"
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
@@ -201,6 +199,12 @@ func main() {
 	fmt.Printf("  SongComposer: %d tracks\n", len(evMap))
 
 	// --- Midra-style lead generation (scale-degree motif, 65% stepwise, random velocity/duation) ---
+	// Midra-style drums (kick+snare+hihat, random variation).
+	dn := composer.GenerateDrumsMidra(plan.TotalBars)
+	if len(dn) > 0 {
+		evMap["drums"] = dn
+	}
+
 	// Midra-style pad/chords (block vs arp alternation, random timing/velocity).
 	pn := composer.GenerateChordsMidra(chordStrs, plan.TotalBars)
 	if len(pn) > 0 {
@@ -219,20 +223,7 @@ func main() {
 		fmt.Printf("  Lead: %d Midra-style notes\n", len(ln))
 	}
 
-	// --- V2 Arranger (skip lead) ---
-	leadCopy := evMap["lead"] // save lead
-	conflicts := arranger.CheckArrangement(evMap, plan.TotalBars)
-	if len(conflicts) > 0 {
-		arranger.ResolveConflicts(conflicts, evMap)
-	}
-	evMap["lead"] = leadCopy // restore lead unmodified
 
-	// --- V2 Critic (skip lead) ---
-	musicScore := critic.Evaluate(evMap, plan.TotalBars)
-	if repaired, regen := critic.Repair(evMap, musicScore, plan.TotalBars, plan.BPM); repaired || regen {
-		fmt.Printf("  Critic: repaired=%t regen=%t score=%.2f\n", repaired, regen, musicScore.Total)
-	}
-	evMap["lead"] = leadCopy // restore lead unmodified
 
 	agent.GenerateChordPad(plan, evMap)
 

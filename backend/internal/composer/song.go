@@ -278,6 +278,77 @@ func chordRootMIDI(chord string, octave int) int {
 	return 36 // fallback C2
 }
 
+// GenerateDrumsMidra is a Go port of Midra's generate_drums().
+func GenerateDrumsMidra(totalBars int) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(42))
+	motifLen := 8
+	hatMotif := make([]int, motifLen)
+	for i := range hatMotif {
+		hatMotif[i] = rng.Intn(2)
+	}
+	hatMotif[0] = 1
+	hatMotif[motifLen-1] = rng.Intn(2)
+
+	kickCandidates := []float64{0.0, 0.75, 1.5, 2.0, 2.75, 3.5}
+	kickMotif := make([]float64, 2)
+	kickMotif[0] = kickCandidates[rng.Intn(len(kickCandidates))]
+	kickMotif[1] = kickCandidates[rng.Intn(len(kickCandidates))]
+
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+
+		// Kick on strong beats + random positions
+		for _, beat := range sortedUniqueFloats(append([]float64{0.0, 2.0}, kickMotif...)) {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 36, DrumName: "kick",
+				StartBeat: base + beat, DurationBeat: 0.1, Velocity: 98 + rng.Intn(19),
+			})
+		}
+
+		// Snare on 2 and 4
+		for _, beat := range []float64{1.0, 3.0} {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 38, DrumName: "snare",
+				StartBeat: base + beat, DurationBeat: 0.1, Velocity: 94 + rng.Intn(17),
+			})
+		}
+
+		// Hi-hat 8th notes with random skip
+		for i := 0; i < 8; i++ {
+			if hatMotif[i%motifLen] == 0 {
+				continue
+			}
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 42, DrumName: "closed_hat",
+				StartBeat: base + float64(i)*0.5, DurationBeat: 0.1, Velocity: 70 + rng.Intn(27),
+			})
+		}
+	}
+	fmt.Printf("[MidraDrums] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
+func sortedUniqueFloats(s []float64) []float64 {
+	m := make(map[float64]bool)
+	var result []float64
+	for _, v := range s {
+		if !m[v] {
+			m[v] = true
+			result = append(result, v)
+		}
+	}
+	// Simple bubble sort for small slices
+	for i := 0; i < len(result); i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[i] > result[j] {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+	return result
+}
+
 // GenerateChordsMidra is a Go port of Midra's generate_chords().
 // Alternates between block and arpeggiated patterns, random durations, random velocities.
 func GenerateChordsMidra(chords []string, totalBars int) []schema.NoteEvent {
