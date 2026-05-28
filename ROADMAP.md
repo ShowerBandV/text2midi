@@ -1,5 +1,137 @@
 # text2midi 路线图
 
+## 第二代架构（V2）
+
+### 核心转变：从"生成器"到"DAW Copilot"
+
+```
+当前:  一次性生成 MIDI → 不可编辑
+目标:  结构化生成 → 局部重生成 → 风格迁移 → 轨道替换
+```
+
+### V2 架构
+
+```
+internal/
+├── planner/        歌曲规划器（LLM 输出结构化 plan）
+│   ├── plan.go         SongPlan / SectionPlan
+│   ├── timeline.go     时间线布局
+│   └── template.go     段落模板匹配
+│
+├── phrase/         乐句系统（按 phrase 而不是 bar 生成）
+│   ├── phrase.go       Phrase / 4-bar question-answer
+│   └── builder.go      从 section → phrase → bar → notes
+│
+├── motif/          主题记忆（跨段落重复 + 变奏）
+│   ├── motif.go        Motif / 5 种变奏方法
+│   └── registry.go     全局 motif 注册 + 检索
+│
+├── arranger/       编曲协调器（空间管理）
+│   ├── arranger.go     ArrangementState / 音区冲突检测
+│   ├── density.go      节奏密度调节
+│   └── register.go     自动留白 / 轨道协调
+│
+├── critic/         批判器（生成后质量评估）
+│   ├── critic.go       MusicScore / 四项评分
+│   └── repair.go       低分触发局部重生成
+│
+├── performance/    演奏层（人性化）
+│   ├── humanize.go     timing drift / velocity cluster / ghost notes
+│   └── groove.go       laid back / swing 局部化
+│
+├── retrieval/      RAG for Music
+│   ├── pattern.go      PatternEmbedding / 和弦-节奏-风格索引
+│   └── search.go       DNA 模板相似度检索
+│
+├── composer/        总控（已有，需重构为分段生成）
+│   ├── song.go         接收 planner → 分派给 arranger/generator
+│   └── context.go      GenerationContext / DNA state
+│
+├── generator/       规则生成器（已有）
+│   ├── bass.go
+│   ├── drum.go
+│   ├── chord.go
+│   ├── lead.go
+│   └── fx.go
+│
+└── musicdna/        结构化音乐分析（已有）
+    ├── types.go
+    └── extractor.go
+```
+
+### 10 个核心模块详解
+
+#### 1. planner（规划器）
+- 输入：LLM 解析结果（style / mood / feature_vector）
+- 输出：SongPlan { BPM, Key, Sections []SectionPlan }
+- 每个 SectionPlan：{ Name, Bars, Energy, Density, Instruments, MotifIDs }
+- **为什么重要**：音乐是"结构优先"，不是 note 优先
+
+#### 2. phrase（乐句系统）
+- 4-bar question + 4-bar answer 结构
+- Phrase { Bars, Tension, Resolution, MotifID }
+- 生成流程：section → phrase → bar → notes
+- **为什么重要**：人类按 phrase 作曲，按 bar 生成是 AI 味的根源
+
+#### 3. motif（主题记忆）
+- 跨段落跟踪 motif
+- 第一次副歌 → Motif A，第二次副歌 → Motif A'
+- 变奏：Transpose / Invert / RhythmMutation / OctaveShift
+- **为什么重要**：没有 recurring motif 就不像歌
+
+#### 4. arranger（编曲协调器）
+- ArrangementState { Density, RegisterUsage, RhythmComplexity }
+- 检测音区冲突（bass 和 lead 不要同时中频）
+- 节奏冲突时自动调整（鼓密→旋律简化）
+- 自动留白（chorus 前空一拍）
+- **为什么重要**：这是"高级感"的来源
+
+#### 5. critic（批判器）
+- MusicScore { Repetition, Tension, Groove, Climax }
+- 检测：melody collapse / rhythm collapse / empty arrangement / no climax
+- `if score.Climax < 0.5 { regenerateChorus() }`
+- **为什么重要**：质量飞跃的关键闭环
+
+#### 6. performance（演奏层）
+- timing drift（± 随机毫秒偏移）
+- velocity cluster（句子级动态，不是随机）
+- ghost notes（特别是鼓）
+- laid back groove（snare 略靠后）
+- **为什么重要**：让 MIDI 从"机械"变"真人"
+
+#### 7. retrieval（RAG for Music）
+- PatternEmbedding { Chords, Rhythm, Mood }
+- 检索：chord progression / rhythm pattern / bass groove / arrangement style
+- **为什么重要**：纯生成不稳定，检索 + 条件生成才是工程级方案
+
+#### 8. DNA 系统升级
+- DNA 不再是 metadata，而是直接参与采样
+- `dna.ApplyToMelody()` / `dna.ApplyToRhythm()` / `dna.ApplyToHarmony()`
+- 周杰伦 DNA → 偏好大跳后回归
+- City Pop DNA → 偏好 maj7
+- **为什么重要**：DNA 影响每次 note 决策
+
+#### 9. Style 系统重构
+- 从离散 enum 改为连续 StyleVector
+- `type StyleVector struct { Warmth, Aggressive, Acoustic, Groove, Complexity }`
+- "cyberpunk jazz" → 0.6 cyberpunk + 0.4 jazz
+- **为什么重要**：风格无限组合，不再固定
+
+#### 10. DAW Copilot 能力
+- 局部重生成（第 9-16 小节）
+- 风格迁移（保持 melody 换 citypop）
+- 局部编辑（"让副歌更燃"）
+- 轨道替换（重做 bass）
+- **为什么重要**：MIDI-first 系统的真正优势，和 Suno 的根本区别
+
+### 3 个月执行计划
+
+| 月份 | 模块 | 产出 |
+|------|------|------|
+| **第 1 月** | planner + phrase + motif | 结构化规划 + 乐句系统 + 主题记忆 |
+| **第 2 月** | arranger + critic + performance | 编曲协调 + 质量评估 + 人性化 |
+| **第 3 月** | retrieval + DAW edit API + partial regen | RAG + 局部编辑 + 风格迁移 |
+
 ## Phase 1: DNA 系统打地基（当前）
 
 ### Structure Extractor（音乐分镜）
@@ -62,40 +194,10 @@
 - [ ] API（/generate / /dna/extract / /dna/mutate）
 - [ ] Web UI
 
-## 架构诊断（2025.06）
+## 架构诊断
 
 ### 当前瓶颈
-
 composer 层还只是"参数映射器"，不是真正的"作曲决策器"。
 
-### 缺失的关键能力
-
-1. **Section-aware Composer** — 每个段落 (intro/verse/pre/chorus/bridge/outro) 分别生成，而非整曲统一处理
-2. **Motif Memory** — 主题跨段落记忆 + 回归，不是每小节重新生成
-3. **Iterative Generation** — 多轮协同生成 (chord→bass→melody→drum→回头修 melody)
-4. **Style Vector** — 从离散的 style enum 改为连续的 style embedding (warmth/density/acoustic/groove/complexity)
-5. **Humanizer** — velocity drift / timing drift / ghost note / imperfect quantize / 局部 swing
-6. **Planner 层** — 作曲 Agent 应输出结构化 plan (tempo/key/sections/motifs)，而非单维 genre tag
-
-### 下一阶段建议新增目录
-
-```
-internal/
-├── planner/       作曲规划器（LLM 输出结构化 plan）
-├── motif/         主题记忆 + 回归系统
-├── arranger/      编曲层（section-aware 编排）
-├── humanizer/     人性化（velocity drift / timing drift / ghost note）
-├── retrieval/     DNA 模板检索
-└── memory/        跨曲目记忆
-```
-
-### 差异化优势
-
-不是"AI 生成音乐"，而是"AI 辅助作曲 DAW"——生成的是结构化音乐，可编辑、可局部修改、可保留和弦换旋律。这是和 Suno 等纯音频 AI 的根本区别。
-
-## 当前优先级
-
-1. Section-aware Composer（段落分别生成）
-2. Motif Memory（主题记忆 + 回归）
-3. Structure Extractor（段落拆解）
-4. Motif Scoring System
+### 与纯音频 AI 的差异化
+不是"AI 生成音乐"，而是"AI 辅助作曲 DAW"——生成的是结构化、可编辑、可局部修改的音乐。
