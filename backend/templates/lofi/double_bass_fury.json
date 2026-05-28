@@ -1,0 +1,303 @@
+{
+  "name": "Double Bass Fury",
+  "style": "lofi",
+  "description": "Auto-extracted from 重金属, 双踩鼓 (8 bars, E minor)",
+  "dna": {
+    "structure": {
+      "sections": [
+        {
+          "name": "intro",
+          "start_bar": 0,
+          "bars": 8,
+          "energy": 0.7,
+          "density": 0.66
+        }
+      ],
+      "bar_features": [
+        {
+          "bar": 0,
+          "density": 0.6585365853658537,
+          "avg_velocity": 0.6517935258092737,
+          "chord_change": false,
+          "instrument_count": 5,
+          "silence_ratio": 0,
+          "energy": 0.6914730170923757
+        },
+        {
+          "bar": 1,
+          "density": 0.5609756097560976,
+          "avg_velocity": 0.7312564190345772,
+          "chord_change": false,
+          "instrument_count": 4,
+          "silence_ratio": 0,
+          "energy": 0.6331980639217553
+        },
+        {
+          "bar": 2,
+          "density": 0.5609756097560976,
+          "avg_velocity": 0.7381033892502568,
+          "chord_change": false,
+          "instrument_count": 4,
+          "silence_ratio": 0,
+          "energy": 0.6352521549864591
+        },
+        {
+          "bar": 3,
+          "density": 0.5853658536585366,
+          "avg_velocity": 0.8031496062992126,
+          "chord_change": false,
+          "instrument_count": 4,
+          "silence_ratio": 0,
+          "energy": 0.6669611420523653
+        },
+        {
+          "bar": 4,
+          "density": 0.8292682926829268,
+          "avg_velocity": 0.7433997220935618,
+          "chord_change": false,
+          "instrument_count": 5,
+          "silence_ratio": 0,
+          "energy": 0.8043207296361987
+        },
+        {
+          "bar": 5,
+          "density": 0.6341463414634146,
+          "avg_velocity": 0.8201090248334343,
+          "chord_change": false,
+          "instrument_count": 4,
+          "silence_ratio": 0,
+          "energy": 0.6964392115150709
+        },
+        {
+          "bar": 6,
+          "density": 0.6341463414634146,
+          "avg_velocity": 0.789824348879467,
+          "chord_change": false,
+          "instrument_count": 4,
+          "silence_ratio": 0,
+          "energy": 0.6873538087288806
+        },
+        {
+          "bar": 7,
+          "density": 0.8048780487804879,
+          "avg_velocity": 0.6680983058935814,
+          "chord_change": false,
+          "instrument_count": 5,
+          "silence_ratio": 0,
+          "energy": 0.769535182824985
+        }
+      ],
+      "template": "through-composed",
+      "confidence": 0.3
+    },
+    "harmony": {
+      "key": "E minor",
+      "progression": [
+        {
+          "bar": 0,
+          "chord": "Em"
+        },
+        {
+          "bar": 1,
+          "chord": "Em"
+        },
+        {
+          "bar": 2,
+          "chord": "Em"
+        },
+        {
+          "bar": 3,
+          "chord": "Em"
+        },
+        {
+          "bar": 4,
+          "chord": "Em"
+        },
+        {
+          "bar": 5,
+          "chord": "Em"
+        },
+        {
+          "bar": 6,
+          "chord": "Em"
+        },
+        {
+          "bar": 7,
+          "chord": "Em"
+        }
+      ],
+      "confidence": 1
+    },
+    "motif": {
+      "pattern": [
+        5,
+        2,
+        -2,
+        -5
+      ],
+      "rhythm": [
+        0.48,
+        0.48,
+        0.48,
+        0.48
+      ],
+      "score": {
+        "repetition": 0.1111111111111111,
+        "contour": 0.5308423766136839,
+        "simplicity": 0.6403508771929824,
+        "rhythm_identity": 0.6269736842105265,
+        "total": 0.40407783204788306
+      },
+      "confidence": 0.08831168831168831,
+      "variants": [
+        {
+          "type": "transpose",
+          "pattern": [
+            5,
+            2,
+            -2,
+            -5
+          ]
+        },
+        {
+          "type": "transpose",
+          "pattern": [
+            5,
+            2,
+            -2,
+            -5
+          ]
+        },
+        {
+          "type": "transpose",
+          "pattern": [
+            5,
+            2,
+            -2,
+            -5
+          ]
+        },
+        {
+          "type": "transpose",
+          "pattern": [
+            5,
+            2,
+            -2,
+            -5
+          ]
+        },
+        {
+          "type": "transpose",
+          "pattern": [
+            5,
+            2,
+            -2,
+            -5
+          ]
+        },
+        {
+          "type": "transpose",
+          "pattern": [
+            5,
+            2,
+            -2,
+            -5
+          ]
+        },
+        {
+          "type": "transpose",
+          "pattern": [
+            5,
+            2,
+            -2,
+            -5
+          ]
+        }
+      ]
+    },
+    "rhythm": {
+      "density": 1,
+      "swing_amount": 0.6837003885077575,
+      "syncopation": 0.5786802030456852,
+      "variety": 1,
+      "confidence": 0.8595600676818952
+    },
+    "texture": {
+      "track_count": 6,
+      "layers": [
+        {
+          "name": "bass",
+          "role": "harmonic",
+          "active": true,
+          "note_count": 32,
+          "avg_pitch": 40.8
+        },
+        {
+          "name": "drums",
+          "role": "rhythm",
+          "active": true,
+          "note_count": 88,
+          "avg_pitch": 38
+        },
+        {
+          "name": "lead",
+          "role": "melodic",
+          "active": true,
+          "note_count": 77,
+          "avg_pitch": 68.1
+        },
+        {
+          "name": "fx",
+          "role": "atmosphere",
+          "active": true,
+          "note_count": 23,
+          "avg_pitch": 44.6
+        },
+        {
+          "name": "chords",
+          "role": "harmonic",
+          "active": true,
+          "note_count": 48,
+          "avg_pitch": 57.7
+        }
+      ],
+      "density": 0.44666666666666666,
+      "confidence": 0.7142857142857143
+    },
+    "dynamics": {
+      "energy_curve": [
+        0.5968503937007874,
+        0.7312564190345772,
+        0.7381033892502568,
+        0.8031496062992126,
+        0.7433997220935618,
+        0.8201090248334343,
+        0.789824348879467,
+        0.6680983058935814
+      ],
+      "dynamic_range": 1,
+      "avg_velocity": 0.7313126955021033,
+      "crescendo": false,
+      "confidence": 0.8656563477510517
+    },
+    "emotion": {
+      "tension": 0.01445040714365426,
+      "energy": 0.7793093407488658,
+      "warmth": 0.8967563756023036,
+      "stability": 0.97509765625,
+      "brightness": 0.1865671641791045,
+      "curve": [
+        0.5968503937007874,
+        0.7312564190345772,
+        0.7381033892502568,
+        0.8031496062992126,
+        0.7433997220935618,
+        0.8201090248334343,
+        0.789824348879467,
+        0.6680983058935814
+      ],
+      "confidence": 0.5704361887847857
+    }
+  },
+  "source": "重金属, 双踩鼓"
+}
