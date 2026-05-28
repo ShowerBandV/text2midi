@@ -198,24 +198,16 @@ func main() {
 	evMap = composer.ComposeSong(motif, chordStrs, plan.TotalBars, basePitch, plan.BPM, rng,
 		plan.FeatureVector.Darkness, plan.FeatureVector.Energy,
 		plan.FeatureVector.RhythmicComplexity, plan.FeatureVector.Tension)
-	fmt.Printf("  SongComposer: %d tracks", len(evMap))
+	fmt.Printf("  SongComposer: %d tracks\n", len(evMap))
 
-	cpJSON := agent.ChordProgressionToJSON(plan.ChordProgression)
-	// --- LLM writes lead, bass, and pad (Midra-style: LLM per track) ---
-	styleDesc := fmt.Sprintf("{style:%%s}", *styleName)
-	fvJSON := fmt.Sprintf("{dark:%.1f,en:%.1f,ten:%.1f,rhy:%.1f}",
-		plan.FeatureVector.Darkness, plan.FeatureVector.Energy,
-		plan.FeatureVector.Tension, plan.FeatureVector.RhythmicComplexity)
-
-	if ln, err := agent.GenerateMelodyNotes(client, "lead", plan.Key.Root, plan.Key.Scale,
-		styleDesc, fvJSON, cpJSON, plan.BPM, plan.TotalBars*4); err == nil && len(ln) > 0 {
+	// --- Midra-style lead generation (scale-degree motif, 65% stepwise, random velocity/duation) ---
+	ln := composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars)
+	if len(ln) > 0 {
 		evMap["lead"] = ln
-		fmt.Printf("  Lead: %d LLM notes", len(ln))
+		fmt.Printf("  Lead: %d Midra-style notes\n", len(ln))
 	}
 
-	fmt.Println()
-
-	// --- V2 Arranger (skip lead — LLM output is sacrosanct) ---
+	// --- V2 Arranger (skip lead) ---
 	leadCopy := evMap["lead"] // save lead
 	conflicts := arranger.CheckArrangement(evMap, plan.TotalBars)
 	if len(conflicts) > 0 {
