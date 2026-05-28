@@ -201,15 +201,32 @@ func main() {
 	fmt.Printf("  SongComposer: %d tracks", len(evMap))
 
 	cpJSON := agent.ChordProgressionToJSON(plan.ChordProgression)
-	// --- LLM Lead Melody ---
+	// --- LLM writes lead, bass, and pad (Midra-style: LLM per track) ---
 	styleDesc := fmt.Sprintf("{style:%%s}", *styleName)
 	fvJSON := fmt.Sprintf("{dark:%.1f,en:%.1f,ten:%.1f,rhy:%.1f}",
 		plan.FeatureVector.Darkness, plan.FeatureVector.Energy,
 		plan.FeatureVector.Tension, plan.FeatureVector.RhythmicComplexity)
+
 	if ln, err := agent.GenerateMelodyNotes(client, "lead", plan.Key.Root, plan.Key.Scale,
 		styleDesc, fvJSON, cpJSON, plan.BPM, plan.TotalBars*4); err == nil && len(ln) > 0 {
 		evMap["lead"] = ln
 		fmt.Printf("  Lead: %d LLM notes", len(ln))
+	}
+
+	// LLM also writes bass line (replace rule-based).
+	if bn, err := agent.GenerateMelodyNotes(client, "bass", plan.Key.Root, plan.Key.Scale,
+		styleDesc, fvJSON, cpJSON, plan.BPM, plan.TotalBars*4); err == nil && len(bn) > 0 {
+		evMap["bass"] = bn
+		fmt.Printf(", Bass: %d LLM notes\n", len(bn))
+	} else {
+		fmt.Println()
+	}
+
+	// LLM writes pad/chords (replace rule-based block chords).
+	if pn, err := agent.GenerateMelodyNotes(client, "pad", plan.Key.Root, plan.Key.Scale,
+		styleDesc, fvJSON, cpJSON, plan.BPM, plan.TotalBars*4); err == nil && len(pn) > 0 {
+		evMap["pad"] = pn
+		fmt.Printf("  Pad: %d LLM notes\n", len(pn))
 	}
 
 	// --- V2 Arranger (skip lead — LLM output is sacrosanct) ---
