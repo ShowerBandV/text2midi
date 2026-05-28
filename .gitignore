@@ -29,6 +29,10 @@ python-util/
 # Generated MIDI output
 backend/generated/
 
+# Frontend experiment (not part of main project)
+frontend/midimind/
+frontend/midimind.zip
+
 # Music wiki raw data (PDFs + generated markdown)
 music_wiki_raw/
 backend/midi_output/
