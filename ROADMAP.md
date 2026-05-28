@@ -199,5 +199,28 @@ internal/
 ### 当前瓶颈
 composer 层还只是"参数映射器"，不是真正的"作曲决策器"。
 
+## V3 方向（架构评审）
+
+### 核心问题：Pipeline → Graph
+
+当前是单向流水线：Planner → Motif → Phrase → Composer → Arranger → Critic → Humanizer
+
+V3 需要改成 MusicStateGraph，各模块可双向交互：
+- Critic 发现 chorus 不够炸 → 回退修改 Planner 的 buildup 策略
+- Motif 变化 → 通知 Phrase 调整句式
+- Arranger 检测到冲突 → 通知 Composer 重新分配音区
+
+### 9 个待解决方向
+
+1. **Motif 语义化** — 从 `Notes []int` 升级为 `MotifSemantic { Contour, EnergyCurve, RhythmProfile, EmotionalIntent }`
+2. **Phrase Deformation** — 允许"故意不完整"的乐句（提前结束/延迟 resolve/半句停顿/pickup/overlap），打破 4 小节闭环的工整感
+3. **Tension Engine** — 新增 `internal/tension/`，实时追踪 Harmonic/Rhythmic/Density/Register 四维张力，驱动 chorus 前的 buildup 和 drop 后的 release
+4. **Critic 接口化** — 从加权评分公式升级为 `Critic interface { Evaluate(song) Score }`，支持 RuleCritic / EmbeddingCritic / HumanPreferenceCritic / TransformerCritic
+5. **Long-term Memory** — 新增 `internal/memory/`，跨曲目学习用户偏好（FavoriteIntervals / Grooves / Density / ChordMotion）
+6. **Style Embedding** — 从 `Warmth:0.7` 离散 slider 升级为 128d latent style embedding
+7. **Manipulate > Generate** — 保持和弦替换旋律 / 保持旋律换和弦 / 风格迁移 / 情绪偏移，这些比纯生成更强
+8. **Music State Engine** — 核心资产从 LLM prompt 变为 motif graph + phrase graph + tension engine + style embedding + critic feedback + retrieval library
+9. **系统复杂度管控** — 模块数量已超 15，需显式定义接口契约 + 模块间通信协议，防止"系统复杂度爆炸"
+
 ### 与纯音频 AI 的差异化
 不是"AI 生成音乐"，而是"AI 辅助作曲 DAW"——生成的是结构化、可编辑、可局部修改的音乐。
