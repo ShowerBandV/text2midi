@@ -62,9 +62,40 @@
 - [ ] API（/generate / /dna/extract / /dna/mutate）
 - [ ] Web UI
 
+## 架构诊断（2025.06）
+
+### 当前瓶颈
+
+composer 层还只是"参数映射器"，不是真正的"作曲决策器"。
+
+### 缺失的关键能力
+
+1. **Section-aware Composer** — 每个段落 (intro/verse/pre/chorus/bridge/outro) 分别生成，而非整曲统一处理
+2. **Motif Memory** — 主题跨段落记忆 + 回归，不是每小节重新生成
+3. **Iterative Generation** — 多轮协同生成 (chord→bass→melody→drum→回头修 melody)
+4. **Style Vector** — 从离散的 style enum 改为连续的 style embedding (warmth/density/acoustic/groove/complexity)
+5. **Humanizer** — velocity drift / timing drift / ghost note / imperfect quantize / 局部 swing
+6. **Planner 层** — 作曲 Agent 应输出结构化 plan (tempo/key/sections/motifs)，而非单维 genre tag
+
+### 下一阶段建议新增目录
+
+```
+internal/
+├── planner/       作曲规划器（LLM 输出结构化 plan）
+├── motif/         主题记忆 + 回归系统
+├── arranger/      编曲层（section-aware 编排）
+├── humanizer/     人性化（velocity drift / timing drift / ghost note）
+├── retrieval/     DNA 模板检索
+└── memory/        跨曲目记忆
+```
+
+### 差异化优势
+
+不是"AI 生成音乐"，而是"AI 辅助作曲 DAW"——生成的是结构化音乐，可编辑、可局部修改、可保留和弦换旋律。这是和 Suno 等纯音频 AI 的根本区别。
+
 ## 当前优先级
 
-1. Structure Extractor（段落拆解）
-2. Motif 评分系统（好旋律的判断标准）
-3. DNA Library
-4. MIDI Cleaner
+1. Section-aware Composer（段落分别生成）
+2. Motif Memory（主题记忆 + 回归）
+3. Structure Extractor（段落拆解）
+4. Motif Scoring System
