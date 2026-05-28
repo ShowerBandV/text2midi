@@ -205,6 +205,80 @@ func drumPattern(darkness, energy, rhythmic, tension float64) [16]int {
 
 // ─── Style-aware bass ──────────────────────────────────────────
 
+// GenerateBassMidra is a Go port of Midra's generate_bass().
+// Follows chord roots with octave shifts, random durations and velocities.
+func GenerateBassMidra(chords []string, totalBars int) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(42))
+	motifLen := 8
+	motif := make([]int, motifLen)
+	for i := range motif {
+		motif[i] = rng.Intn(7)
+	}
+	motif[0] = 0
+	motif[motifLen-1] = []int{0, 2, 4}[rng.Intn(3)]
+
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		chord := chords[bar%len(chords)]
+		root := chordRootMIDI(chord, 2) // C2 = 36
+		base := float64(bar) * 4.0
+		beatPositions := []float64{0.0, 1.0, 2.0, 3.0}
+
+		for idx, beat := range beatPositions {
+			m := motif[(bar*2+idx)%motifLen]
+			octave := 0
+			if m >= 3 && m <= 4 {
+				octave = 12
+			} else if m >= 5 {
+				octave = 24
+			}
+			pitch := root + octave
+			if pitch < 28 {
+				pitch = 28
+			}
+			if pitch > 60 {
+				pitch = 60
+			}
+			events = append(events, schema.NoteEvent{
+				Type:         "note",
+				Pitch:        pitch,
+				StartBeat:    base + beat,
+				DurationBeat: []float64{0.5, 0.75, 1.0}[rng.Intn(3)],
+				Velocity:     82 + rng.Intn(23), // 82-104
+			})
+		}
+	}
+	fmt.Printf("[MidraBass] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
+func chordRootMIDI(chord string, octave int) int {
+	root := chord
+	if len(chord) > 1 && chord[len(chord)-1] == 'm' {
+		root = chord[:len(chord)-1]
+	}
+	if len(chord) > 1 && chord[len(chord)-1] == '7' {
+		root = chord[:len(chord)-1]
+	}
+	if root == root {
+		if len(root) > 1 && root[len(root)-1] == 'm' {
+			root = root[:len(root)-1]
+		}
+		if len(root) > 1 && (root[len(root)-1] == '7' || root[len(root)-1] == '5') {
+			root = root[:len(root)-1]
+		}
+		rootSemi := map[string]int{
+			"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5,
+			"F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11,
+		}
+		if rs := rootSemi[root]; rs >= 0 || root == "" {
+			return (octave+1)*12 + rootSemi[root]
+		}
+	}
+	return 36 // fallback C2
+}
+
+// Original GenerateBass kept for compatibility.
 func GenerateBass(chords []string, timeline *Timeline, darkness, energy, rhythmic, tension float64) []schema.NoteEvent {
 	var events []schema.NoteEvent
 	isMetal := darkness > 0.7 && energy > 0.7
