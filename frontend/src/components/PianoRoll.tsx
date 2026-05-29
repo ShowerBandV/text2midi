@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import { MidiNote, InstrumentType, PlaybackState } from "../types";
 import { playNote } from "../utils/audio";
 import { Play, Pause, RotateCcw, Plus, Minus, CheckCircle, Scale, Volume2, Waves, Piano, Sliders, Music } from "lucide-react";
