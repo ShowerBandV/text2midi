@@ -1,9 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/ShowerBandV/text2midi/internal/agent"
 	"github.com/ShowerBandV/text2midi/internal/composer"
@@ -18,10 +22,13 @@ func main() {
 	styleName := flag.String("style", "trap", "Style")
 	bpm := flag.Int("bpm", 140, "BPM")
 	flag.Int64("seed", 0, "Random seed (0=random)")
-	flag.String("key", "C minor", "Key")
+	key := flag.String("key", "C minor", "Key")
 	bars := flag.Int("bars", 8, "Bars")
 	out := flag.String("out", "./midi_output", "Output dir")
 	local := flag.Bool("local", false, "Local mode (no API key, rule-based generation)")
+	refine := flag.Bool("refine", false, "Enable LLM-based reviewer + iterative refinement (costs extra tokens)")
+	dryRun := flag.Bool("dry-run", false, "Stop after plan stage — print plan summary and exit (LLM mode only)")
+	resume := flag.Bool("resume", false, "Resume from last checkpoint after failure (LLM mode only)")
 	flag.Parse()
 
 	if *prompt == "" && !*local {
@@ -34,15 +41,7 @@ func main() {
 
 	// Local mode: skip LLM, use rule-based generation directly.
 	if *local {
-		fmt.Println("[Local mode] Generating without LLM...")
-		ctx := composer.NewDefaultContext(*bars, *bpm).
-			WithStyle(0.3, 0.6, 0.4, 0.3)
-		ctx.Motif = []int{0, 2, 4, 3, 0}
-		events := make(map[string][]schema.NoteEvent)
-		fmt.Printf("Generated %d tracks:\n", len(events))
-		for name, evs := range events {
-			fmt.Printf("  %s: %d events\n", name, len(evs))
-		}
+		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun)
 		return
 	}
 
@@ -57,17 +56,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── Checkpoint setup ─────────────────────────────────────────
+	projectDir := filepath.Join(*out, ".projects", sanitizeName(*prompt))
+	if *resume {
+		fmt.Printf("  [Resume] loading from %s\n", projectDir)
+	}
+
 	intentRes, err := agent.ParseIntent(client, *prompt, false, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Intent: %v\n", err)
 		os.Exit(1)
 	}
+	saveStage(projectDir, "01_intent.json", intentRes)
 
 	plan, planRaw, err := agent.PlanSong(client, intentRes)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Plan: %v\n", err)
 		os.Exit(1)
 	}
+	saveStage(projectDir, "02_song_plan.json", planRaw)
 	// Copy feature vector from intent result to plan.
 	intentMap, _ := intentRes["intent"].(map[string]any)
 	if fvRaw, ok := intentMap["feature_vector"]; ok {
@@ -119,79 +126,275 @@ func main() {
 		plan.TotalBars = *bars
 	}
 
-	arr, _, err := agent.PlanArrangement(client, intentRes, planRaw, false)
+	arr, arrRaw, err := agent.PlanArrangement(client, intentRes, planRaw, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Arr: %v\n", err)
 		os.Exit(1)
 	}
+	saveStage(projectDir, "03_arrangement.json", arrRaw)
+
+	// --- Dry-run: print plan and exit ---
+	if *dryRun {
+		fmt.Println("\n  ═══ Plan Summary ═══")
+		fmt.Printf("  Title:       %s\n", plan.Title)
+		fmt.Printf("  Key:         %s %s\n", plan.Key.Root, plan.Key.Mode)
+		fmt.Printf("  BPM:         %d\n", plan.BPM)
+		fmt.Printf("  Bars:        %d\n", plan.TotalBars)
+		fmt.Printf("  Duration:    %.1fs\n", plan.EstimatedDuration)
+		fmt.Printf("  Loopable:    %t\n", plan.Loopable)
+		if len(plan.Sections) > 0 {
+			fmt.Println("\n  Sections:")
+			for _, sec := range plan.Sections {
+				fmt.Printf("    %-10s bars %2d-%2d  energy=%.1f  density=%.1f  register=%s\n",
+					sec.Name, sec.StartBar, sec.StartBar+sec.Bars, sec.Energy, sec.Density, sec.Register)
+			}
+		}
+		fmt.Println("\n  Chord progression:")
+		for _, c := range plan.ChordProgression {
+			fmt.Printf("    bar %2d: %s\n", c.Bar, c.Chord)
+		}
+		fmt.Printf("\n  Arrangement: %d tracks\n", len(arr.Tracks))
+		for _, t := range arr.Tracks {
+			fmt.Printf("    %-12s ch%-2d  program=%-3d  role=%s\n", t.ID, t.Channel, ptrVal(t.Program), t.Role)
+		}
+		fmt.Println("\n  [dry-run] Plan OK. Remove --dry-run to generate MIDI.")
+		return
+	}
 
 	// --- LLM Agent pipeline (Clef-style) ---
 	evMap := make(map[string][]schema.NoteEvent)
+	var evMu sync.Mutex
 
-	// --- LLM Agents (Clef-style: LLM writes notes per track) ---
+	// --- LLM Agents: only generate tracks that exist in the Arrangement ---
+	// Determine which tracks are needed by mapping arrangement track IDs to event keys.
+	needLead, needPad, needBass, needDrums := false, false, false, false
+	for _, at := range arr.Tracks {
+		key := lookupEventKey(at.ID)
+		switch key {
+		case "lead":
+			needLead = true
+		case "pad":
+			needPad = true
+		case "bass":
+			needBass = true
+		case "drums":
+			needDrums = true
+		}
+	}
+	// Fallback: if arrangement is empty, generate all core tracks.
+	if !needLead && !needPad && !needBass && !needDrums {
+		needLead, needPad, needBass, needDrums = true, true, true, true
+	}
+
 	cpJSON := agent.ChordProgressionToJSON(plan.ChordProgression)
 	totalBeats := plan.TotalBars * 4
+	taskCount := 0
+	if needLead {
+		taskCount++
+	}
+	if needPad {
+		taskCount++
+	}
+	if needBass {
+		taskCount++
+	}
+	if needDrums {
+		taskCount++
+	}
 
-	if ln, err := agent.ComposerAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
-		evMap["lead"] = ln
-		fmt.Printf("  [Composer] lead: %d notes\n", len(ln))
+	var wg sync.WaitGroup
+	wg.Add(taskCount)
+
+	if needLead {
+		go func() {
+			defer wg.Done()
+			ln, err := agent.ComposerAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON)
+			evMu.Lock()
+			if err == nil {
+				evMap["lead"] = ln
+			}
+			fmt.Printf("  [Composer] lead: %d notes (err=%v)\n", len(ln), err)
+			evMu.Unlock()
+		}()
 	}
-	if bn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "bass"); err == nil {
-		evMap["bass"] = bn
-		fmt.Printf("  [Rhythmist] bass: %d notes\n", len(bn))
+	if needBass {
+		go func() {
+			defer wg.Done()
+			// Use rule-based bass for guitar-driven styles (punk/metal/rock).
+			styleForDrums := determineDrumStyle(intentMap)
+			if styleForDrums != "" && (styleForDrums == "punk" || styleForDrums == "metal" || styleForDrums == "rock") {
+				chordNames := chordsFromPlan(plan)
+				bn := composer.GenerateBassStyled(styleForDrums, chordNames, plan.TotalBars)
+				evMu.Lock()
+				evMap["bass"] = bn
+				evMu.Unlock()
+				fmt.Printf("  [Rhythmist] bass: %d notes (rule-based, style=%s)\n", len(bn), styleForDrums)
+			} else {
+				bn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "bass")
+				evMu.Lock()
+				if err == nil {
+					evMap["bass"] = bn
+				}
+				fmt.Printf("  [Rhythmist] bass: %d notes (LLM, err=%v)\n", len(bn), err)
+				evMu.Unlock()
+			}
+		}()
 	}
-	if pn, err := agent.HarmonistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
-		evMap["pad"] = pn
-		fmt.Printf("  [Harmonist] pad: %d notes\n", len(pn))
+	if needPad {
+		go func() {
+			defer wg.Done()
+			// Use rule-based power chords for guitar-driven styles.
+			styleForDrums := determineDrumStyle(intentMap)
+			if styleForDrums != "" && (styleForDrums == "punk" || styleForDrums == "metal" || styleForDrums == "rock") {
+				chordNames := chordsFromPlan(plan)
+				pn := composer.GenerateChordsStyled(styleForDrums, chordNames, plan.TotalBars, 0)
+				evMu.Lock()
+				evMap["pad"] = pn
+				evMu.Unlock()
+				fmt.Printf("  [Harmonist] chords: %d notes (rule-based power chords, style=%s)\n", len(pn), styleForDrums)
+			} else {
+				pn, err := agent.HarmonistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON)
+				evMu.Lock()
+				if err == nil {
+					evMap["pad"] = pn
+				}
+				fmt.Printf("  [Harmonist] pad: %d notes (LLM, err=%v)\n", len(pn), err)
+				evMu.Unlock()
+			}
+		}()
 	}
-	if dn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "drums"); err == nil {
-		evMap["drums"] = dn
-		fmt.Printf("  [Rhythmist] drums: %d notes\n", len(dn))
+	if needDrums {
+		go func() {
+			defer wg.Done()
+			// Use rule-based style drums when available (saves 1 LLM call).
+			styleForDrums := determineDrumStyle(intentMap)
+			if styleForDrums != "" {
+				bars := plan.TotalBars
+				energy := plan.FeatureVector.Energy
+				dn := composer.GenerateDrumsStyled(styleForDrums, bars, energy)
+				evMu.Lock()
+				evMap["drums"] = dn
+				evMu.Unlock()
+				fmt.Printf("  [Rhythmist] drums: %d notes (rule-based, style=%s)\n", len(dn), styleForDrums)
+			} else {
+				dn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "drums")
+				evMu.Lock()
+				if err == nil {
+					evMap["drums"] = dn
+				}
+				fmt.Printf("  [Rhythmist] drums: %d notes (LLM, err=%v)\n", len(dn), err)
+				evMu.Unlock()
+			}
+		}()
 	}
-	fmt.Printf("  Generated: drums+bass+pad+lead (LLM agents)\n")
+
+	wg.Wait()
+	fmt.Printf("  Generated: %d tracks (LLM agents, parallel)\n", taskCount)
 
 	// --- Orchestrator: add dynamics ---
 	agent.OrchestratorAgent(evMap, plan.TotalBars)
 
-	// --- Reviewer + Leader iteration loop ---
-	for round := 0; round < 3; round++ {
-		report := agent.ReviewerAgent(client, evMap, plan.TotalBars)
-		fmt.Printf("  [Reviewer] round %d: total=%.1f melody=%.1f harm=%.1f rhythm=%.1f\n",
-			round+1, report.Total, report.Melody, report.Harmony, report.Rhythm)
-
-		leaderPlan := agent.LeaderAgent(report, round+1)
-		if leaderPlan.IterationComplete {
-			fmt.Printf("  [Leader] iteration complete (round %d)\n", round+1)
-			break
+	// --- Refinement (opt-in with --refine) ---
+	if *refine {
+		maxRounds := 2
+		if v := os.Getenv("LLM_MAX_REFINE_ROUNDS"); v != "" {
+			fmt.Sscanf(v, "%d", &maxRounds)
 		}
+		for round := 0; round < maxRounds; round++ {
+			report, err := agent.ReviewWithLLM(client, evMap, plan)
+			if err != nil {
+				fmt.Printf("  [Reviewer] LLM review failed: %v — stopping iteration\n", err)
+				break
+			}
+			fmt.Printf("  [Reviewer] round %d: total=%.1f melody=%.1f harm=%.1f rhythm=%.1f\n",
+				round+1, report.Total, report.Melody, report.Harmony, report.Rhythm)
+			for _, issue := range report.Issues {
+				fmt.Printf("    - %s\n", issue)
+			}
 
-		// Execute tasks.
-		for _, task := range leaderPlan.Tasks {
-			fmt.Printf("  [Leader] executing: %s — %s\n", task.Agent, task.Instruction)
-			switch task.Agent {
-			case "composer":
-				if ln, err := agent.ComposerAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
-					evMap["lead"] = ln
+			leaderPlan := agent.LeaderAgent(report, round+1)
+			if leaderPlan.IterationComplete {
+				fmt.Printf("  [Leader] iteration complete (round %d)\n", round+1)
+				break
+			}
+
+			// Separate tasks with and without dependencies.
+			var independent, dependent []agent.LeaderTask
+			for _, task := range leaderPlan.Tasks {
+				if task.DependsOn == "" {
+					independent = append(independent, task)
+				} else {
+					dependent = append(dependent, task)
 				}
-			case "harmonist":
-				if pn, err := agent.HarmonistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
-					evMap["pad"] = pn
+			}
+
+			// Run independent tasks in parallel.
+			if len(independent) > 0 {
+				var tWg sync.WaitGroup
+				tWg.Add(len(independent))
+				for _, task := range independent {
+					task := task
+					go func() {
+						defer tWg.Done()
+						fmt.Printf("  [Leader] executing: %s — %s\n", task.Agent, task.Instruction)
+						switch task.Agent {
+						case "composer":
+							if ln, err := agent.ComposerAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
+								evMu.Lock()
+								evMap["lead"] = ln
+								evMu.Unlock()
+							}
+						case "harmonist":
+							if pn, err := agent.HarmonistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
+								evMu.Lock()
+								evMap["pad"] = pn
+								evMu.Unlock()
+							}
+						case "rhythmist":
+							if bn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "bass"); err == nil {
+								evMu.Lock()
+								evMap["bass"] = bn
+								evMu.Unlock()
+							}
+							if dn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "drums"); err == nil {
+								evMu.Lock()
+								evMap["drums"] = dn
+								evMu.Unlock()
+							}
+						}
+					}()
 				}
-			case "rhythmist":
-				if bn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "bass"); err == nil {
-					evMap["bass"] = bn
-				}
-				if dn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "drums"); err == nil {
-					evMap["drums"] = dn
+				tWg.Wait()
+			}
+
+			// Run dependent tasks sequentially (they depend on previous results).
+			for _, task := range dependent {
+				fmt.Printf("  [Leader] executing: %s — %s (depends on %s)\n", task.Agent, task.Instruction, task.DependsOn)
+				switch task.Agent {
+				case "composer":
+					if ln, err := agent.ComposerAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
+						evMap["lead"] = ln
+					}
+				case "harmonist":
+					if pn, err := agent.HarmonistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
+						evMap["pad"] = pn
+					}
+				case "rhythmist":
+					if bn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "bass"); err == nil {
+						evMap["bass"] = bn
+					}
+					if dn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "drums"); err == nil {
+						evMap["drums"] = dn
+					}
 				}
 			}
 		}
-		if round == 2 {
-			fmt.Printf("  [Leader] max rounds reached — outputting current result\n")
-			break
-		}
+	} else {
+		// Quick Go rule-based check (informational only, no iteration).
+		report := agent.ReviewerAgent(client, evMap, plan.TotalBars)
+		fmt.Printf("  [Review] melody=%.1f harm=%.1f rhythm=%.1f struct=%.1f total=%.1f (use --refine for LLM iteration)\n",
+			report.Melody, report.Harmony, report.Rhythm, report.Structure, report.Total)
 	}
-
 
 	// Generate rhythm guitar power chords for distorted guitar tracks.
 	for _, at := range arr.Tracks {
@@ -203,29 +406,19 @@ func main() {
 
 	tracks := make([]schema.TrackIR, 0)
 	for _, at := range arr.Tracks {
-		// Map arrangement track IDs to generator event keys.
-		lookup := at.ID
-		switch at.ID {
-		case "distorted_guitar", "rhythm_guitar":
-			lookup = "rhythm_guitar"
-		case "piano":
-			lookup = "chords"
-		case "pad", "synth_pad", "warm_pad", "ambient_pad":
-			lookup = "chords"
-		case "strings", "string_ensemble", "rapid_strings", "string_pad":
-			lookup = "chords"
-		case "choir", "vocal":
-			lookup = "lead"
-		case "brass", "horn", "heroic_brass", "brass_ensemble", "orchestral_hits":
-			lookup = "lead"
-		case "lead_guitar", "guitar":
-			lookup = "lead"
-		case "guzheng", "pipa", "dizi", "harp":
-			lookup = "lead"
-		case "timpani", "percussion", "taiko", "taiko_drums", "driving_percussion":
-			lookup = "drums"
-		}
+		// Map arrangement track IDs to the event keys that agents actually produce.
+		// Agents write to: "lead", "pad", "bass", "drums", "chords".
+		lookup := lookupEventKey(at.ID)
 		ev := evMap[lookup]
+		if ev == nil {
+			// Fallback: try other likely keys.
+			for _, fallback := range fallbackKeys(at.ID) {
+				if ev = evMap[fallback]; ev != nil {
+					lookup = fallback
+					break
+				}
+			}
+		}
 		if ev == nil {
 			ev = []schema.NoteEvent{}
 		}
@@ -239,6 +432,7 @@ func main() {
 			Enabled: true,
 			Events:  ev,
 		})
+		fmt.Printf("  Track %s → events[%s] (%d notes)\n", at.ID, lookup, len(ev))
 	}
 
 	name := plan.Title
@@ -247,8 +441,11 @@ func main() {
 
 	midiIR := schema.MidiIR{
 		Meta: schema.Meta{
-			TicksPerBeat: 480,
-			BPM:          plan.BPM,
+			TicksPerBeat:  480,
+			BPM:           plan.BPM,
+			TotalBars:     plan.TotalBars,
+			BeatsPerBar:   plan.TimeSignature.Numerator,
+			TimeSignature: plan.TimeSignature,
 		},
 		Tracks: tracks,
 	}
@@ -256,6 +453,11 @@ func main() {
 	// --- Stem export ---
 	os.MkdirAll(outputPath+"/../stems", 0755)
 	composer.ExportStems(midiIR, outputPath+"/../stems", name, nil)
+
+	if err := validateMidiIR(midiIR); err != nil {
+		fmt.Fprintf(os.Stderr, "Validation FAILED: %v\n", err)
+		os.Exit(1)
+	}
 
 	result, err := midi.RenderMIDI(midiIR, outputPath, nil)
 	if err != nil {
@@ -271,6 +473,19 @@ func main() {
 	fmt.Printf("  MIDI written: %s\n", result.OutputPath)
 	fmt.Printf("  Tracks: %d | Notes: %d | Duration: %.1fs\n",
 		result.TotalTracks, result.TotalNoteEvents, result.DurationSeconds)
+
+	// ── Token usage & cost ─────────────────────────────────────
+	usage := client.TotalUsage()
+	if usage.Calls > 0 {
+		fmt.Printf("\n  ═══ Token Usage ═══\n")
+		fmt.Printf("  Calls:       %d\n", usage.Calls)
+		fmt.Printf("  Input:       %d tokens\n", usage.InputTokens)
+		fmt.Printf("  Output:      %d tokens\n", usage.OutputTokens)
+		fmt.Printf("  Total:       %d tokens\n", usage.TotalTokens)
+		fmt.Printf("  Model:       %s\n", usage.Model)
+		fmt.Printf("  Cost:        $%.4f USD  (≈ ¥%.4f CNY)\n", usage.CostUSD, usage.CostCNY)
+	}
+
 	fmt.Println("  Done!")
 }
 
@@ -305,6 +520,100 @@ func styleAwareMotif(darkness, energy, tension, rhythmic float64, mode string) [
 	}
 }
 
+// lookupEventKey maps an arrangement track ID to the primary event key.
+// Agents (ComposerAgent, HarmonistAgent, RhythmistAgent) write to: lead, pad, bass, drums.
+// Local mode writes to: lead, chords, bass, drums.
+func lookupEventKey(id string) string {
+	switch id {
+	// ── Melodic tracks → "lead" ──
+	case "lead", "melody", "lead_guitar", "guitar",
+		"piano", "choir", "vocal", "synth_lead",
+		"brass", "horn", "heroic_brass", "brass_ensemble", "orchestral_hits",
+		"guzheng", "pipa", "dizi", "harp":
+		return "lead"
+
+	// ── Harmonic / pad tracks → "pad" (LLM agents) or "chords" (local / fallback) ──
+	case "pad", "synth_pad", "warm_pad", "ambient_pad",
+		"strings", "string_ensemble", "rapid_strings", "string_pad",
+		"chords", "keys":
+		return "pad"
+
+	// ── Bass → "bass" ──
+	case "bass", "sub_bass", "808":
+		return "bass"
+
+	// ── Drums / percussion → "drums" ──
+	case "drums", "percussion", "timpani", "taiko", "taiko_drums", "driving_percussion":
+		return "drums"
+
+	// ── Guitar (rhythm) → "rhythm_guitar" ──
+	case "distorted_guitar", "rhythm_guitar":
+		return "rhythm_guitar"
+
+	// ── FX / SFX → "pad" (closest texture match) ──
+	case "fx", "sfx", "rain_fx", "noise", "texture":
+		return "pad"
+
+	default:
+		return id // direct lookup
+	}
+}
+
+// fallbackKeys returns secondary event keys to try if the primary lookup is empty.
+func fallbackKeys(id string) []string {
+	// If primary maps to "pad" but evMap only has "chords", try chords.
+	// If primary maps to "lead" but evMap only has "pad", try pad.
+	primary := lookupEventKey(id)
+	switch primary {
+	case "pad":
+		return []string{"chords", "lead", "bass"}
+	case "chords":
+		return []string{"pad", "lead"}
+	case "lead":
+		return []string{"pad", "chords", "bass"}
+	case "bass":
+		return []string{"drums", "lead"}
+	case "drums":
+		return []string{"bass", "pad"}
+	case "rhythm_guitar":
+		return []string{"chords", "pad", "lead"}
+	default:
+		// Unknown ID — try common keys in order.
+		return []string{"lead", "pad", "bass", "drums", "chords"}
+	}
+}
+
+// validateMidiIR checks the MIDI IR for common issues before rendering.
+// Returns nil if OK, or an error describing the first problem found.
+func validateMidiIR(midiIR schema.MidiIR) error {
+	if len(midiIR.Tracks) == 0 {
+		return fmt.Errorf("no tracks in MIDI IR — generation produced nothing")
+	}
+	totalNotes := 0
+	for _, t := range midiIR.Tracks {
+		if !t.Enabled {
+			continue
+		}
+		for _, ev := range t.Events {
+			if ev.Type != "note" {
+				continue
+			}
+			if ev.Pitch < 0 || ev.Pitch > 127 {
+				return fmt.Errorf("track %q: note pitch %d out of MIDI range [0-127]", t.ID, ev.Pitch)
+			}
+			if ev.DurationBeat <= 0 {
+				return fmt.Errorf("track %q: note at beat %.2f has duration %.2f ≤ 0", t.ID, ev.StartBeat, ev.DurationBeat)
+			}
+			totalNotes++
+		}
+	}
+	if totalNotes == 0 {
+		return fmt.Errorf("zero notes across all tracks — generation produced empty output")
+	}
+	fmt.Printf("  [Validate] OK: %d tracks, %d notes\n", len(midiIR.Tracks), totalNotes)
+	return nil
+}
+
 func toFloat(v any) float64 {
 	switch x := v.(type) {
 	case float64:
@@ -313,5 +622,562 @@ func toFloat(v any) float64 {
 		return float64(x)
 	default:
 		return 0
+	}
+}
+
+// ─── Local (rule-based) generation ───────────────────────────────────
+
+// runLocal generates MIDI entirely via Go rule-based engines, no LLM.
+// Designed for offline use or quick iteration.
+func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool) {
+	fmt.Println("[Local mode] Generating without LLM...")
+
+	// ── Parse key ────────────────────────────────────────────────
+	keyRoot := "C"
+	keyMode := "major"
+	if k := key; k != "" {
+		if idx := strings.IndexByte(k, ' '); idx > 0 {
+			keyRoot = k[:idx]
+			keyMode = k[idx+1:]
+		} else {
+			keyRoot = k
+		}
+	}
+	// Normalize mode.
+	switch keyMode {
+	case "m", "minor", "Minor", "natural_minor":
+		keyMode = "minor"
+	default:
+		keyMode = "major"
+	}
+
+	// ── Style profile ────────────────────────────────────────────
+	// Pick feature vector + defaults based on style name.
+	darkness, energy, rhythmic, tension, defBPM, defBars, chordStyle := styleProfile(styleName)
+	if bars <= 0 {
+		bars = defBars
+	}
+	if bpm <= 0 {
+		bpm = defBPM
+	}
+
+	fmt.Printf("  Style: %s | %s %s | %d bpm | %d bars\n", styleName, keyRoot, keyMode, bpm, bars)
+	fmt.Printf("  Feature: dark=%.2f energy=%.2f rhythmic=%.2f tension=%.2f\n",
+		darkness, energy, rhythmic, tension)
+
+	// ── Chord progression ────────────────────────────────────────
+	chords := progForStyle(keyRoot, keyMode, bars, chordStyle)
+
+	// ── Dry-run: print plan and exit ─────────────────────────────
+	if dryRun {
+		layout := trackLayout(chordStyle)
+		fmt.Println("\n  ═══ Local Plan Summary ═══")
+		fmt.Printf("  Style:       %s\n", styleName)
+		fmt.Printf("  Key:         %s %s\n", keyRoot, keyMode)
+		fmt.Printf("  BPM:         %d\n", bpm)
+		fmt.Printf("  Bars:        %d\n", bars)
+		fmt.Printf("  Feature:     dark=%.2f energy=%.2f rhythmic=%.2f tension=%.2f\n",
+			darkness, energy, rhythmic, tension)
+		fmt.Println("\n  Chord progression:")
+		for i := 0; i < min(len(chords), 8); i++ {
+			fmt.Printf("    bar %d: %s\n", i, chords[i])
+		}
+		if len(chords) > 8 {
+			fmt.Printf("    ... (repeats, %d total)\n", len(chords))
+		}
+		fmt.Println("\n  Track layout:")
+		if layout.drums {
+			fmt.Println("    Drums (ch9)")
+		}
+		if layout.bass {
+			fmt.Printf("    %s (ch%d, prog=%d)\n", "Bass", 0, layout.bassProg)
+		}
+		ch := 1
+		if layout.rhythm {
+			fmt.Printf("    %s (ch%d, prog=%d)\n", layout.rhythmName, ch, layout.rhythmProg)
+			ch++
+		}
+		if layout.lead {
+			fmt.Printf("    %s (ch%d, prog=%d)\n", layout.leadName, ch, layout.leadProg)
+			ch++
+		}
+		if layout.counter {
+			fmt.Printf("    %s (ch%d, prog=%d)\n", layout.counterName, ch, layout.counterProg)
+		}
+		fmt.Println("\n  [dry-run] Plan OK. Remove --dry-run to generate MIDI.")
+		return
+	}
+
+	// ── Generate tracks ──────────────────────────────────────────
+	evMap := make(map[string][]schema.NoteEvent)
+
+	// Drums: style-specific patterns (metal=double-kick, punk=d-beat, emo=rim-click, etc.).
+	evMap["drums"] = composer.GenerateDrumsStyled(chordStyle, bars, energy)
+	fmt.Printf("  Drums: %d events (style=%s)\n", len(evMap["drums"]), chordStyle)
+
+	// Bass: style-specific patterns (metal=8th chug, punk=driving 8th, emo=sustained).
+	evMap["bass"] = composer.GenerateBassStyled(chordStyle, chords, bars)
+	fmt.Printf("  Bass: %d events (style=%s)\n", len(evMap["bass"]), chordStyle)
+
+	// Chords / Pad: style-specific voicings (metal/punk/rock=power chords, ambient=open).
+	blockRatio := 0.3 + energy*0.4
+	evMap["chords"] = composer.GenerateChordsStyled(chordStyle, chords, bars, blockRatio)
+	fmt.Printf("  Chords: %d events (style=%s)\n", len(evMap["chords"]), chordStyle)
+
+	// Lead melody: scale-based with stepwise bias. Step probability matches style.
+	stepProb := 0.55 + (1.0-tension)*0.3 // higher tension → more stepwise (constrained)
+	velMin := 45 + int(darkness*20)       // darker → softer floor
+	velMax := 75 + int(energy*40)         // higher energy → louder ceiling
+	if velMax > 115 {
+		velMax = 115
+	}
+	secDensity := buildSectionDensity(bars, energy)
+	secRegister := buildSectionRegister(bars, energy)
+	evMap["lead"] = composer.GenerateLeadMidra(keyRoot, keyMode, bars, stepProb, velMin, velMax, secDensity, secRegister)
+	fmt.Printf("  Lead (raw): %d events\n", len(evMap["lead"]))
+
+	// Apply melody grammar for musicality.
+	grammar := composer.NewMelodyGrammar(keyRoot, keyMode)
+	evMap["lead"] = grammar.ApplyAll(evMap["lead"], bars)
+	fmt.Printf("  Lead (grammar): %d events\n", len(evMap["lead"]))
+
+	// ── Build MIDI IR ────────────────────────────────────────────
+	// Track layout is style-driven: punk uses 4-piece, emo uses full ensemble, etc.
+	layout := trackLayout(chordStyle)
+	trackList := make([]schema.TrackIR, 0, 6)
+	ch := 0 // next available MIDI channel (9 = drums)
+
+	// Drums always on ch9.
+	if layout.drums {
+		trackList = append(trackList, schema.TrackIR{
+			ID: "drums", Name: "Drums", Channel: 9, Program: nil,
+			Volume: 100, Pan: 64, Enabled: true, Events: evMap["drums"],
+		})
+	}
+
+	// Bass.
+	if layout.bass && ch < 9 {
+		trackList = append(trackList, schema.TrackIR{
+			ID: "bass", Name: "Bass", Channel: ch, Program: intPtr(layout.bassProg),
+			Volume: 100, Pan: 64, Enabled: true, Events: evMap["bass"],
+		})
+		ch++
+	}
+
+	// Rhythm / chords track (pad or rhythm guitar depending on style).
+	if layout.rhythm && ch < 9 {
+		trackList = append(trackList, schema.TrackIR{
+			ID: "rhythm", Name: layout.rhythmName, Channel: ch, Program: intPtr(layout.rhythmProg),
+			Volume: layout.rhythmVol, Pan: 64, Enabled: true, Events: evMap["chords"],
+		})
+		ch++
+	}
+
+	// Lead melody.
+	if layout.lead && ch < 9 {
+		trackList = append(trackList, schema.TrackIR{
+			ID: "lead", Name: layout.leadName, Channel: ch, Program: intPtr(layout.leadProg),
+			Volume: 100, Pan: 64, Enabled: true, Events: evMap["lead"],
+		})
+		ch++
+	}
+
+	// Counter-melody / texture layer (strings, etc.).
+	if layout.counter && ch < 9 {
+		counter := composer.GenerateCounterMelody(evMap["lead"], bars)
+		if len(counter) > 0 {
+			trackList = append(trackList, schema.TrackIR{
+				ID: "counter", Name: layout.counterName, Channel: ch, Program: intPtr(layout.counterProg),
+				Volume: layout.counterVol, Pan: 72, Enabled: true, Events: counter,
+			})
+			fmt.Printf("  %s (counter): %d events\n", layout.counterName, len(counter))
+		}
+	}
+
+	// ── Apply section dynamics ───────────────────────────────────
+	structure := composer.SelectStructure(energy, "rpg")
+	composer.ApplyStructure(evMap, structure, bars)
+
+	// ── Render MIDI ──────────────────────────────────────────────
+	midiIR := schema.MidiIR{
+		Meta: schema.Meta{
+			TicksPerBeat: 480,
+			BPM:          bpm,
+			TotalBars:    bars,
+			BeatsPerBar:  4,
+			TimeSignature: schema.TimeSignature{Numerator: 4, Denominator: 4},
+		},
+		Tracks: trackList,
+	}
+
+	os.MkdirAll(out, 0755)
+	name := "RPG_Casual"
+	if prompt != "" {
+		name = sanitizeName(prompt)
+	}
+	outputPath := out + "/" + name + ".mid"
+
+	if err := validateMidiIR(midiIR); err != nil {
+		fmt.Fprintf(os.Stderr, "Validation FAILED: %v\n", err)
+		os.Exit(1)
+	}
+
+	result, err := midi.RenderMIDI(midiIR, outputPath, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Render: %v\n", err)
+		os.Exit(1)
+	}
+
+	// ── MusicDNA ─────────────────────────────────────────────────
+	extractor := musicdna.NewExtractor()
+	dna := extractor.Extract(evMap, bars, keyRoot+" "+keyMode)
+	fmt.Println(dna.Print())
+
+	fmt.Printf("\n  MIDI written: %s\n", result.OutputPath)
+	fmt.Printf("  Tracks: %d | Notes: %d | Duration: %.1fs\n",
+		result.TotalTracks, result.TotalNoteEvents, result.DurationSeconds)
+	fmt.Println("  Done!")
+}
+
+// styleProfile returns feature vector + defaults for a named style.
+// "rpg" / "emo" / "trap" / "pop" / "rock" / "metal" / "ambient".
+func styleProfile(style string) (darkness, energy, rhythmic, tension float64, defBPM, defBars int, chordStyle string) {
+	s := strings.ToLower(style)
+	switch {
+	case strings.Contains(s, "emo") || strings.Contains(s, "sad") || strings.Contains(s, "melancholy"):
+		return 0.75, 0.32, 0.22, 0.52, 72, 24, "emo"
+	case strings.Contains(s, "trap") || strings.Contains(s, "hip"):
+		return 0.55, 0.55, 0.65, 0.40, 140, 16, "trap"
+	case strings.Contains(s, "metal") || strings.Contains(s, "heavy"):
+		return 0.80, 0.85, 0.55, 0.65, 160, 32, "metal"
+	case strings.Contains(s, "rock"):
+		return 0.45, 0.70, 0.35, 0.40, 130, 24, "rock"
+	case strings.Contains(s, "pop"):
+		return 0.25, 0.60, 0.35, 0.25, 120, 24, "pop"
+	case strings.Contains(s, "punk"):
+		return 0.35, 0.78, 0.50, 0.35, 170, 24, "punk"
+	case strings.Contains(s, "ambient") || strings.Contains(s, "atmo"):
+		return 0.30, 0.18, 0.10, 0.15, 60, 16, "ambient"
+	default: // rpg / casual / game
+		return 0.20, 0.45, 0.30, 0.15, 100, 24, "rpg"
+	}
+}
+
+// progForStyle returns a chord progression for a given style and key.
+func progForStyle(root, mode string, totalBars int, chordStyle string) []string {
+	if mode == "minor" {
+		switch chordStyle {
+		case "emo":
+			// i - iv - VII - III (emo descending, melancholic)
+			base := []string{root + "m", intervalChord(root, 5), intervalChord(root, 10), intervalChord(root, 3)}
+			return repeatChords(base, totalBars)
+		case "ambient":
+			// i - VII - i - VI (static, floating)
+			base := []string{root + "m", intervalChord(root, 10), root + "m", intervalChord(root, 8)}
+			return repeatChords(base, totalBars)
+		default:
+			// i - bVI - bIII - bVII (classic minor loop)
+			base := []string{root + "m", intervalChord(root, 8), intervalChord(root, 3), intervalChord(root, 10)}
+			return repeatChords(base, totalBars)
+		}
+	}
+	// Major
+	switch chordStyle {
+	case "pop":
+		// I - vi - IV - V (classic pop)
+		base := []string{root, relativeMinor(root), fourthOf(root), fifthOf(root)}
+		return repeatChords(base, totalBars)
+	case "rock":
+		// I - IV - V - IV
+		base := []string{root, fourthOf(root), fifthOf(root), fourthOf(root)}
+		return repeatChords(base, totalBars)
+	case "ambient":
+		// I - IV - I - vi (peaceful float)
+		base := []string{root, fourthOf(root), root, relativeMinor(root)}
+		return repeatChords(base, totalBars)
+	default: // rpg, casual
+		// I - V - vi - IV (peaceful RPG town)
+		base := []string{root, fifthOf(root), relativeMinor(root), fourthOf(root)}
+		return repeatChords(base, totalBars)
+	}
+}
+
+func repeatChords(base []string, totalBars int) []string {
+	// Midra generators consume one chord per bar.
+	out := make([]string, totalBars)
+	for bar := 0; bar < totalBars; bar++ {
+		out[bar] = base[bar%len(base)]
+	}
+	return out
+}
+
+// fifthOf returns the V chord root (7 semitones up).
+func fifthOf(root string) string {
+	return transposeNote(root, 7)
+}
+
+// fourthOf returns the IV chord root (5 semitones up).
+func fourthOf(root string) string {
+	return transposeNote(root, 5)
+}
+
+// relativeMinor returns the vi chord root (9 semitones up = relative minor).
+func relativeMinor(root string) string {
+	r := transposeNote(root, 9)
+	return r + "m"
+}
+
+// intervalChord transposes root by semitones and returns the note name.
+func intervalChord(root string, semitones int) string {
+	return transposeNote(root, semitones)
+}
+
+var noteOrder = []string{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
+
+func transposeNote(root string, semitones int) string {
+	for i, n := range noteOrder {
+		if n == root {
+			return noteOrder[(i+semitones)%12]
+		}
+	}
+	// Fuzzy: try without sharp.
+	for i, n := range noteOrder {
+		if strings.EqualFold(n, root) || strings.HasPrefix(n, root) {
+			return noteOrder[(i+semitones)%12]
+		}
+	}
+	return root
+}
+
+// buildSectionDensity returns per-bar density based on section energy arc.
+// Intro sparse → verse moderate → chorus peak → outro fade.
+func buildSectionDensity(totalBars int, energy float64) []float64 {
+	curve := make([]float64, totalBars)
+	third := totalBars / 3
+	if third < 4 {
+		third = 4
+	}
+	for bar := 0; bar < totalBars; bar++ {
+		switch {
+		case bar < 4:
+			curve[bar] = 0.25 + energy*0.1 // intro: sparse
+		case bar < third:
+			curve[bar] = 0.35 + energy*0.3 // verse: moderate
+		case bar < third*2:
+			curve[bar] = 0.55 + energy*0.45 // chorus: peak
+		case bar < totalBars-4:
+			curve[bar] = 0.40 + energy*0.3 // bridge
+		default:
+			curve[bar] = 0.20 + energy*0.15 // outro: fade
+		}
+	}
+	return curve
+}
+
+// buildSectionRegister returns per-bar octave shifts based on section energy.
+// Intro=low octave, chorus=high octave.
+func buildSectionRegister(totalBars int, energy float64) []int {
+	reg := make([]int, totalBars)
+	third := totalBars / 3
+	if third < 4 {
+		third = 4
+	}
+	for bar := 0; bar < totalBars; bar++ {
+		switch {
+		case bar < 4:
+			reg[bar] = 4 // intro: low register
+		case bar < third:
+			reg[bar] = 5 // verse: mid
+		case bar < third*2:
+			reg[bar] = 6 // chorus: high
+		case bar < totalBars-4:
+			reg[bar] = 5 // bridge
+		default:
+			reg[bar] = 4 // outro: back to low
+		}
+	}
+	return reg
+}
+
+// determineDrumStyle checks the parsed intent for style keywords that map to drum styles.
+// Returns "" if no match — caller falls back to LLM drum generation.
+func determineDrumStyle(intentMap map[string]any) string {
+	// Check style list first.
+	if styles, ok := intentMap["style"]; ok {
+		if sl, ok := styles.([]any); ok {
+			for _, s := range sl {
+				if str, ok := s.(string); ok {
+					low := strings.ToLower(str)
+					switch {
+					case strings.Contains(low, "metal") || strings.Contains(low, "heavy"):
+						return "metal"
+					case strings.Contains(low, "punk"):
+						return "punk"
+					case strings.Contains(low, "emo") || strings.Contains(low, "sad") || strings.Contains(low, "melancholy"):
+						return "emo"
+					case strings.Contains(low, "rock"):
+						return "rock"
+					}
+				}
+			}
+		}
+	}
+	// Check mood.
+	if moods, ok := intentMap["mood"]; ok {
+		if ml, ok := moods.([]any); ok {
+			for _, m := range ml {
+				if str, ok := m.(string); ok {
+					low := strings.ToLower(str)
+					if strings.Contains(low, "aggressive") || strings.Contains(low, "angry") {
+						return "metal"
+					}
+					if strings.Contains(low, "sad") || strings.Contains(low, "melancholic") {
+						return "emo"
+					}
+				}
+			}
+		}
+	}
+	return "" // fallback to LLM
+}
+
+// chordsFromPlan extracts chord names from a SongPlan as a per-bar slice.
+func chordsFromPlan(plan *schema.SongPlan) []string {
+	chords := make([]string, plan.TotalBars)
+	for i := range chords {
+		chords[i] = "C" // default
+	}
+	for _, cc := range plan.ChordProgression {
+		if cc.Bar >= 0 && cc.Bar < plan.TotalBars {
+			chords[cc.Bar] = cc.Chord
+			// Fill forward until next chord change.
+			for j := cc.Bar + 1; j < plan.TotalBars; j++ {
+				hasNext := false
+				for _, nc := range plan.ChordProgression {
+					if nc.Bar == j {
+						hasNext = true
+						break
+					}
+				}
+				if hasNext {
+					break
+				}
+				chords[j] = cc.Chord
+			}
+		}
+	}
+	return chords
+}
+
+func sanitizeName(s string) string {
+	// Replace problematic filename chars with underscores.
+	s = strings.Map(func(r rune) rune {
+		if r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' {
+			return '_'
+		}
+		return r
+	}, s)
+	if len(s) > 60 {
+		s = s[:60]
+	}
+	return s
+}
+
+func intPtr(v int) *int { return &v }
+
+func ptrVal(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+// saveStage writes a pipeline stage result as JSON to the project directory.
+func saveStage(projectDir, filename string, data any) {
+	dir := projectDir
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return // non-fatal
+	}
+	path := filepath.Join(dir, filename)
+	b, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return
+	}
+	if err := os.WriteFile(path, b, 0644); err != nil {
+		return
+	}
+	fmt.Printf("  [Checkpoint] saved %s\n", path)
+}
+
+// trackLayoutConfig defines which tracks to include and their MIDI programs.
+// Each style picks a layout, e.g. punk = drums+bass+guitar+guitar (4-piece, no pad/strings).
+type trackLayoutConfig struct {
+	drums, bass, rhythm, lead, counter                        bool
+	rhythmName, leadName, counterName                         string
+	rhythmProg, leadProg, counterProg, bassProg               int
+	rhythmVol, counterVol                                     int
+}
+
+// trackLayout returns the instrument layout for a given style.
+func trackLayout(style string) trackLayoutConfig {
+	switch style {
+	case "punk":
+		// Classic punk 4-piece: drums + bass + rhythm guitar + lead guitar. No pad, no strings.
+		return trackLayoutConfig{
+			drums: true, bass: true, rhythm: true, lead: true, counter: false,
+			bassProg: 34, // Electric Bass (pick)
+			rhythmName: "Rhythm Gtr", rhythmProg: 30, rhythmVol: 95, // Distortion Guitar
+			leadName: "Lead Gtr", leadProg: 29, // Overdrive Guitar
+		}
+	case "metal":
+		// Metal: drums + bass + rhythm guitar + lead guitar. No pad, no strings.
+		return trackLayoutConfig{
+			drums: true, bass: true, rhythm: true, lead: true, counter: false,
+			bassProg: 34, // Electric Bass (pick)
+			rhythmName: "Rhythm Gtr", rhythmProg: 30, rhythmVol: 100, // Distortion
+			leadName: "Lead Gtr", leadProg: 30, // Distortion Guitar
+		}
+	case "rock":
+		// Rock: drums + bass + rhythm guitar + lead guitar. No pad, no strings.
+		return trackLayoutConfig{
+			drums: true, bass: true, rhythm: true, lead: true, counter: false,
+			bassProg: 33, // Electric Bass (finger)
+			rhythmName: "Rhythm Gtr", rhythmProg: 29, rhythmVol: 90, // Overdrive
+			leadName: "Lead Gtr", leadProg: 29, // Overdrive Guitar
+		}
+	case "trap":
+		// Trap: drums + 808 bass + pad + synth lead. No strings.
+		return trackLayoutConfig{
+			drums: true, bass: true, rhythm: true, lead: true, counter: false,
+			bassProg: 39, // Synth Bass
+			rhythmName: "Pad", rhythmProg: 90, rhythmVol: 85, // New Age Pad
+			leadName: "Synth Lead", leadProg: 81, // Lead (square)
+		}
+	case "ambient":
+		// Ambient: sparse drums + bass + evolving pad + pad lead. No strings.
+		return trackLayoutConfig{
+			drums: true, bass: true, rhythm: true, lead: true, counter: false,
+			bassProg: 33,
+			rhythmName: "Pad", rhythmProg: 95, rhythmVol: 75, // Sweep Pad
+			leadName: "Lead Pad", leadProg: 92, // Warm Pad
+		}
+	case "emo":
+		// Emo: drums + bass + dark pad + piano lead + strings counter.
+		return trackLayoutConfig{
+			drums: true, bass: true, rhythm: true, lead: true, counter: true,
+			bassProg: 33,
+			rhythmName: "Pad", rhythmProg: 91, rhythmVol: 80, // Polysynth (dark)
+			leadName: "Piano", leadProg: 0,
+			counterName: "Strings", counterProg: 49, counterVol: 65, // String Ensemble
+		}
+	default: // rpg, pop
+		// Full ensemble: drums + bass + warm pad + piano lead + strings counter.
+		return trackLayoutConfig{
+			drums: true, bass: true, rhythm: true, lead: true, counter: true,
+			bassProg: 33,
+			rhythmName: "Pad", rhythmProg: 89, rhythmVol: 85, // Warm Pad
+			leadName: "Piano", leadProg: 0,
+			counterName: "Strings", counterProg: 49, counterVol: 70,
+		}
 	}
 }

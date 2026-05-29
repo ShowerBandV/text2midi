@@ -136,7 +136,8 @@ func BuildPhrase(motif []int, plan MotifPlan, rng *rand.Rand) Phrase {
 
 // GenerateLeadMidra is a Go port of Midra's generate_lead().
 // Generates a random scale-degree motif with stepwise bias, anchors, and random velocities.
-func GenerateLeadMidra(keyRoot, keyMode string, totalBars int, stepProb float64, velMin, velMax int, secDensity []float64) []schema.NoteEvent {
+// secDensity: per-bar density [0-1]. secRegister: per-bar octave shift (nil = auto from density).
+func GenerateLeadMidra(keyRoot, keyMode string, totalBars int, stepProb float64, velMin, velMax int, secDensity []float64, secRegister []int) []schema.NoteEvent {
 	scale := getScaleDegrees(keyRoot, keyMode)
 	if len(scale) == 0 {
 		scale = []int{0, 2, 3, 5, 7, 8, 10} // fallback: C minor
@@ -181,10 +182,18 @@ func GenerateLeadMidra(keyRoot, keyMode string, totalBars int, stepProb float64,
 		noteCount := int(float64(motifLen) * density)
 		if noteCount < 2 { noteCount = 2 }
 		if noteCount > motifLen { noteCount = motifLen }
-		// Register: higher density → higher octave
+		// Register: use explicit section register if provided, else auto from density.
 		octave := 5
-		if density > 0.7 { octave = 6 }
-		if density < 0.3 { octave = 4 }
+		if bar < len(secRegister) && secRegister[bar] != 0 {
+			octave = secRegister[bar]
+		} else {
+			if density > 0.7 {
+				octave = 6
+			}
+			if density < 0.3 {
+				octave = 4
+			}
+		}
 
 		for i := 0; i < noteCount; i++ {
 			step := motif[i]

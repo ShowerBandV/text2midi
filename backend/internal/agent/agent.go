@@ -270,6 +270,28 @@ func mapToSongPlan(m map[string]any) (*schema.SongPlan, error) {
 		}
 	}
 
+	// Sections (optional per-section energy/density/register).
+	if secs, ok := getList(m, "sections"); ok {
+		for _, item := range secs {
+			if sm, ok := item.(map[string]any); ok {
+				sec := schema.SongSection{
+					Name:     getString(sm, "name"),
+					StartBar: getInt(sm, "start_bar"),
+					Bars:     getInt(sm, "bars"),
+					Energy:   toFloat64(sm["energy"]),
+					Density:  toFloat64(sm["density"]),
+					Register: getString(sm, "register"),
+				}
+				if sec.Bars <= 0 {
+					sec.Bars = getInt(sm, "length_bars") // alternate key
+				}
+				if sec.Name != "" && sec.Bars > 0 {
+					p.Sections = append(p.Sections, sec)
+				}
+			}
+		}
+	}
+
 	// Validate.
 	if p.TotalBars <= 0 {
 		return nil, fmt.Errorf("invalid total_bars: %d", p.TotalBars)

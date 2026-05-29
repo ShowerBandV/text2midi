@@ -81,6 +81,16 @@ type MidiIR struct {
 	Tracks []TrackIR `json:"tracks"`
 }
 
+// SongSection describes one section (intro/verse/chorus/...) in the song structure.
+type SongSection struct {
+	Name     string  `json:"name"`     // "intro", "verse", "chorus", "bridge", "outro"
+	StartBar int     `json:"start_bar"`
+	Bars     int     `json:"bars"`
+	Energy   float64 `json:"energy"`   // 0-1 target energy for this section
+	Density  float64 `json:"density"`  // 0-1 note density hint
+	Register string  `json:"register"` // "low", "mid", "high" — target pitch register
+}
+
 // SongPlan represents the high-level song structure.
 // This is what the LLM song_planner would produce (or a hardcoded test version).
 type SongPlan struct {
@@ -91,6 +101,7 @@ type SongPlan struct {
 	TotalBars        int            `json:"total_bars"`
 	Loopable         bool           `json:"loopable"`
 	ChordProgression []ChordChange  `json:"chord_progression"`
+	Sections         []SongSection  `json:"sections,omitempty"`
 	EstimatedDuration float64       `json:"estimated_duration_seconds"`
 	FeatureVector    FeatureVector  `json:"feature_vector,omitempty"`
 }

@@ -204,6 +204,119 @@ func drumPattern(darkness, energy, rhythmic, tension float64) [16]int {
 
 // ─── Style-aware bass ──────────────────────────────────────────
 
+// GenerateBassStyled generates bass with style-specific patterns.
+func GenerateBassStyled(style string, chords []string, totalBars int) []schema.NoteEvent {
+	switch style {
+	case "metal":
+		return bassMetal(chords, totalBars)
+	case "punk":
+		return bassPunk(chords, totalBars)
+	case "emo":
+		return bassEmo(chords, totalBars)
+	default:
+		return GenerateBassMidra(chords, totalBars)
+	}
+}
+
+// bassMetal: tight 8th-note root chugs, synced with double-kick.
+func bassMetal(chords []string, totalBars int) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(42))
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		chord := chords[bar%len(chords)]
+		root := chordRootMIDI(chord, 2)
+		base := float64(bar) * 4.0
+		// 8th note root chugs, palm-muted feel (short duration).
+		for step := 0; step < 8; step++ {
+			beat := float64(step) * 0.5
+			vel := 95 + rng.Intn(15)
+			// Accent downbeats.
+			if step%2 == 0 {
+				vel += 10
+			}
+			pitch := root
+			// Octave jump every 4th bar.
+			if bar%4 == 0 {
+				pitch += 12
+			}
+			if pitch < 28 {
+				pitch = 28
+			}
+			if pitch > 60 {
+				pitch = 60
+			}
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: pitch,
+				StartBeat: base + beat, DurationBeat: 0.15,
+				Velocity: vel,
+			})
+		}
+		// Quick 16th-note fill before bar end every 2nd bar.
+		if bar%2 == 1 {
+			for _, b := range []float64{3.25, 3.5, 3.75} {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: root,
+					StartBeat: base + b, DurationBeat: 0.08,
+					Velocity: 90 + rng.Intn(15),
+				})
+			}
+		}
+	}
+	fmt.Printf("[Bass-Metal] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
+// bassPunk: driving 8th-note root notes, simple and relentless.
+func bassPunk(chords []string, totalBars int) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(42))
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		chord := chords[bar%len(chords)]
+		root := chordRootMIDI(chord, 2)
+		base := float64(bar) * 4.0
+		// 8th notes on root, punk style (fast, driving, simple).
+		for step := 0; step < 8; step++ {
+			beat := float64(step) * 0.5
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: root,
+				StartBeat: base + beat, DurationBeat: 0.2,
+				Velocity: 100 + rng.Intn(15),
+			})
+		}
+	}
+	fmt.Printf("[Bass-Punk] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
+// bassEmo: sparse, long sustained root notes, melancholic.
+func bassEmo(chords []string, totalBars int) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(42))
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		chord := chords[bar%len(chords)]
+		root := chordRootMIDI(chord, 2)
+		base := float64(bar) * 4.0
+		// Only play on beats 1 and 3, long sustained.
+		for _, beat := range []float64{0.0, 2.0} {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: root,
+				StartBeat: base + beat, DurationBeat: 1.5,
+				Velocity: 60 + rng.Intn(20),
+			})
+		}
+		// Occasional octave-up on bar 4 for subtle lift.
+		if bar%4 == 3 {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: root + 12,
+				StartBeat: base + 3.0, DurationBeat: 0.8,
+				Velocity: 50 + rng.Intn(15),
+			})
+		}
+	}
+	fmt.Printf("[Bass-Emo] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
 // GenerateBassMidra is a Go port of Midra's generate_bass().
 // Follows chord roots with octave shifts, random durations and velocities.
 func GenerateBassMidra(chords []string, totalBars int) []schema.NoteEvent {
@@ -275,6 +388,223 @@ func chordRootMIDI(chord string, octave int) int {
 		}
 	}
 	return 36 // fallback C2
+}
+
+// GenerateDrumsStyled generates drums with style-specific patterns.
+// Falls back to GenerateDrumsMidra for styles without specific handling.
+func GenerateDrumsStyled(style string, totalBars int, energy float64) []schema.NoteEvent {
+	switch style {
+	case "metal":
+		return drumsMetal(totalBars, energy)
+	case "punk":
+		return drumsPunk(totalBars, energy)
+	case "emo":
+		return drumsEmo(totalBars, energy)
+	case "rock":
+		return drumsRock(totalBars, energy)
+	default:
+		density := energy * 0.5
+		if density < 0.15 {
+			density = 0.15
+		}
+		return GenerateDrumsMidra(totalBars, density)
+	}
+}
+
+// drumsMetal: double-kick 16th notes, china cymbal accents, aggressive.
+func drumsMetal(totalBars int, energy float64) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(42))
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+		// Double-kick: 16th note pattern (eighth notes on beats, 16th fills).
+		for step := 0; step < 16; step++ {
+			beat := float64(step) * 0.25
+			// Kick on every 8th note (steps 0,2,4,6,8,10,12,14).
+			if step%2 == 0 {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: 36, DrumName: "kick",
+					StartBeat: base + beat, DurationBeat: 0.08,
+					Velocity: 100 + int(energy*25),
+				})
+			}
+			// Extra double-kick fills on last beat of every 2nd bar.
+			if bar%2 == 1 && step >= 12 && step%2 == 1 {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: 36, DrumName: "kick",
+					StartBeat: base + beat, DurationBeat: 0.06,
+					Velocity: 95 + int(energy*20),
+				})
+			}
+		}
+		// Snare on 2 and 4 (heavy).
+		for _, beat := range []float64{1.0, 3.0} {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 38, DrumName: "snare",
+				StartBeat: base + beat, DurationBeat: 0.1,
+				Velocity: 105 + rng.Intn(15),
+			})
+		}
+		// Ride cymbal (51) or china (52) instead of hi-hat.
+		for step := 0; step < 8; step++ {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 51, DrumName: "ride",
+				StartBeat: base + float64(step)*0.5, DurationBeat: 0.1,
+				Velocity: 75 + rng.Intn(20),
+			})
+		}
+		// Crash on bar start.
+		if bar%4 == 0 {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 49, DrumName: "crash",
+				StartBeat: base, DurationBeat: 0.3,
+				Velocity: 115,
+			})
+		}
+	}
+	fmt.Printf("[Drums-Metal] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
+// drumsPunk: fast d-beat / skate punk pattern.
+func drumsPunk(totalBars int, energy float64) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(42))
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+		// D-beat: kick on 1 + 3&, snare on 2 + 4.
+		kickBeats := []float64{0.0, 0.5, 1.5, 2.0, 2.5, 3.5}
+		for _, beat := range kickBeats {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 36, DrumName: "kick",
+				StartBeat: base + beat, DurationBeat: 0.08,
+				Velocity: 100 + rng.Intn(15),
+			})
+		}
+		for _, beat := range []float64{1.0, 3.0} {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 38, DrumName: "snare",
+				StartBeat: base + beat, DurationBeat: 0.08,
+				Velocity: 105 + rng.Intn(15),
+			})
+		}
+		// Fast 8th note hi-hat.
+		for step := 0; step < 8; step++ {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 42, DrumName: "closed_hat",
+				StartBeat: base + float64(step)*0.5, DurationBeat: 0.06,
+				Velocity: 80 + rng.Intn(20),
+			})
+		}
+	}
+	fmt.Printf("[Drums-Punk] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
+// drumsEmo: sparse, rim-click, occasional floor tom, minimal.
+func drumsEmo(totalBars int, energy float64) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(42))
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+		// Sparse kick: only on beat 1 (and sometimes 3).
+		events = append(events, schema.NoteEvent{
+			Type: "note", Pitch: 36, DrumName: "kick",
+			StartBeat: base, DurationBeat: 0.15,
+			Velocity: 70 + rng.Intn(20),
+		})
+		if bar%2 == 0 {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 36, DrumName: "kick",
+				StartBeat: base + 2.0, DurationBeat: 0.15,
+				Velocity: 65 + rng.Intn(15),
+			})
+		}
+		// Rim-click (37) instead of snare — softer, more textured.
+		for _, beat := range []float64{1.0, 3.0} {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 37, DrumName: "rim_click",
+				StartBeat: base + beat, DurationBeat: 0.12,
+				Velocity: 55 + rng.Intn(20),
+			})
+		}
+		// Floor tom (43) fill every 4 bars.
+		if bar%4 == 3 {
+			for _, beat := range []float64{3.0, 3.25, 3.5, 3.75} {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: 43, DrumName: "floor_tom",
+					StartBeat: base + beat, DurationBeat: 0.12,
+					Velocity: 70 + rng.Intn(20),
+				})
+			}
+		}
+		// Very sparse hi-hat.
+		for step := 0; step < 8; step++ {
+			if step%4 == 0 {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: 42, DrumName: "closed_hat",
+					StartBeat: base + float64(step)*0.5, DurationBeat: 0.15,
+					Velocity: 45 + rng.Intn(20),
+				})
+			}
+		}
+	}
+	fmt.Printf("[Drums-Emo] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
+// drumsRock: solid backbeat with fills.
+func drumsRock(totalBars int, energy float64) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(42))
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+		// Kick on 1 and 3 (and syncopation).
+		for _, beat := range []float64{0.0, 2.0} {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 36, DrumName: "kick",
+				StartBeat: base + beat, DurationBeat: 0.1,
+				Velocity: 95 + rng.Intn(20),
+			})
+		}
+		// Snare on 2 and 4.
+		for _, beat := range []float64{1.0, 3.0} {
+			vel := 100 + rng.Intn(15)
+			// Accent on beat 4 every 4th bar.
+			if bar%4 == 3 && beat == 3.0 {
+				vel = 120
+			}
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 38, DrumName: "snare",
+				StartBeat: base + beat, DurationBeat: 0.1,
+				Velocity: vel,
+			})
+		}
+		// 8th note hi-hat with accents.
+		for step := 0; step < 8; step++ {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 42, DrumName: "closed_hat",
+				StartBeat: base + float64(step)*0.5, DurationBeat: 0.1,
+				Velocity: 75 + rng.Intn(25),
+			})
+		}
+		// Crash + floor tom fill every 8 bars.
+		if bar%8 == 7 {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 49, DrumName: "crash",
+				StartBeat: base, DurationBeat: 0.4, Velocity: 110,
+			})
+			for _, beat := range []float64{3.0, 3.25, 3.5, 3.75} {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: 43 + rng.Intn(3), DrumName: "tom",
+					StartBeat: base + beat, DurationBeat: 0.1,
+					Velocity: 90 + rng.Intn(20),
+				})
+			}
+		}
+	}
+	fmt.Printf("[Drums-Rock] %d events, %d bars\n", len(events), totalBars)
+	return events
 }
 
 // GenerateDrumsMidra is a Go port of Midra's generate_drums().
@@ -351,6 +681,70 @@ func sortedUniqueFloats(s []float64) []float64 {
 		}
 	}
 	return result
+}
+
+// GenerateChordsStyled generates chords/pad with style-specific voicings.
+func GenerateChordsStyled(style string, chords []string, totalBars int, blockRatio float64) []schema.NoteEvent {
+	switch style {
+	case "metal", "punk", "rock":
+		return chordsPower(chords, totalBars) // power chords (root + fifth, no third)
+	case "ambient":
+		return chordsAmbient(chords, totalBars) // open voicings, slow attack
+	default:
+		return GenerateChordsMidra(chords, totalBars, blockRatio)
+	}
+}
+
+// chordsPower: root + fifth power chords (no third), perfect for distorted guitar styles.
+func chordsPower(chords []string, totalBars int) []schema.NoteEvent {
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		chord := chords[bar%len(chords)]
+		root := chordRootMIDI(chord, 3) // C3 range for guitar
+		base := float64(bar) * 4.0
+		// Power chord: root + fifth at two octaves.
+		pitches := []int{root, root + 7, root + 12, root + 19}
+		for _, p := range pitches {
+			if p < 36 || p > 84 {
+				continue
+			}
+			// Strummed power chord: short attack on downbeats.
+			for _, beat := range []float64{0.0, 2.0} {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p,
+					StartBeat: base + beat, DurationBeat: 1.5,
+					Velocity: 80 + (bar%3)*5,
+				})
+			}
+		}
+	}
+	fmt.Printf("[Chords-Power] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
+// chordsAmbient: open voicings, slow evolving pad with wide intervals.
+func chordsAmbient(chords []string, totalBars int) []schema.NoteEvent {
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		chord := chords[bar%len(chords)]
+		root := chordRootMIDI(chord, 2)
+		base := float64(bar) * 4.0
+		// Open voicing: root + fifth + tenth + octave up (spread across 2+ octaves).
+		pitches := []int{root, root + 7, root + 16, root + 24}
+		for _, p := range pitches {
+			if p < 28 || p > 72 {
+				continue
+			}
+			// Long sustained notes, slow attack feel.
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: p,
+				StartBeat: base, DurationBeat: 3.8,
+				Velocity: 40 + (bar%4)*5,
+			})
+		}
+	}
+	fmt.Printf("[Chords-Ambient] %d events, %d bars\n", len(events), totalBars)
+	return events
 }
 
 // GenerateChordsMidra is a Go port of Midra's generate_chords().

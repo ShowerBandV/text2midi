@@ -4,7 +4,10 @@ package llm
 
 import (
 	"fmt"
+	"os"
 	"strings"
+
+	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
 // noteToSemitoneStr and semitoneToNoteStr are compact maps for the prompts
@@ -12,70 +15,20 @@ import (
 const noteMapStr = `{"C":0,"C#":1,"Db":1,"D":2,"D#":3,"Eb":3,"E":4,"F":5,"F#":6,"Gb":6,"G":7,"G#":8,"Ab":8,"A":9,"A#":10,"Bb":10,"B":11}`
 const noteNamesStr = `["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]`
 
-// chordKnowledge is an embedded reference for the song planner.
-// Condensed from knowledges/chords.md --essential progression templates + rules.
-const chordKnowledge = `# Chord Progression Knowledge
-
-## Major key templates (convert degrees to concrete chords in selected key)
-
-bright_pop:      I - V - vi - IV
-warm_pop:        I - vi - IV - V
-simple_major:    I - IV - V - I
-open_folk:       I - V - IV - I
-emotional_major: vi - IV - I - V
-
-## Minor key templates
-
-dark_loop:       i - VI - VII - i
-epic_minor:      i - VI - III - VII
-dark_descending: i - VII - VI - VII
-boss_battle:     i - VI - VII - V
-classical_minor: i - iv - V - i
-tragic_minor:    i - V - VI - iv
-
-## Atmosphere / special
-
-horror_drone:     i
-horror_phrygian:  i - bII
-lofi_soft:        I - vi - ii - V
-lofi_resolution:  ii - V - I - I
-eastern_dark:     i - VII - VI - VII
-eastern_fantasy:  i - III - VII - i
-
-## Emo / Melancholy --忧郁、悲伤、情感化 (slow tempo, minor key)
-emo_sad:         i - VI - III - VII        # 最忧郁的进行，小调+大三度色�?emo_emotional:   i - iv - VII - III        # 更暗的忧郁，iv增加悲伤�?emo_pop_punk:    vi - IV - I - V           # 流行emo，大调关系小调起
-emo_tension:     i - V - VI - iv           # 悲剧感，强烈的情感张�?emo_dark:        i - VII - VI - VII        # 压抑下行，适合intro/verse
-
-## Quick selection by mood
-
-Bright/happy:       major ->I - V - vi - IV (BPM 120-160)
-Warm/healing:       major ->I - vi - IV - V (BPM 80-120)
-Sad/lyrical:        minor ->i - VI - III - VII, or vi - IV - I - V in major (BPM 60-100)
-Emo/melancholy:     minor ->i - VI - III - VII or i - iv - VII - III (BPM 60-90)
-Dark/dungeon:       minor ->i - VI - VII - i (BPM 80-130)
-Battle/boss:        minor ->i - VI - VII - V (BPM 130-180)
-Epic/adventure:     minor ->i - VI - III - VII (BPM 100-160)
-Horror/suspense:    minor ->i or i - bII (BPM 50-90)
-Lo-fi/chill:        major ->I - vi - ii - V or ii - V - I - I (BPM 70-100)
-East-Asian fantasy: minor ->i - VII - VI - VII (BPM 60-120)
-
-## Rules
-1. Decide major or minor first based on mood
-2. Use 4-bar loop by default, one chord per bar
-3. In loopable music, final chord must naturally return to first chord
-4. V ->I (major) or V ->i / VII ->i (minor) for strong return
-5. Do NOT output diminished chords, slash chords, or extended chords
-6. Output only root-position major/minor triads (e.g. C, Dm, Bb, F#m)
-7. Chord roots must come from this map: ` + "`" + noteMapStr + "`" + `
-8. Canonical note names: ` + "`" + noteNamesStr + "`" + `
-9. For intro: use I/i alone or first 2 chords, slower rhythm
-10. For climax: same progression, higher energy, denser arrangement
-11. BPM MUST match intent.tempo_preference AND the style's mood character:
-    - melancholic/sad/emo/忧郁 ->BPM 60-90 (slow, do NOT use fast tempo)
-    - happy/bright ->BPM 120-160
-    - medium/calm ->BPM 80-120
-    - epic/battle ->BPM 130-180
-`
+// chordKnowledgeContent returns chord progression knowledge for the song planner.
+// Loads from knowledges/chords.md if available; falls back to embedded content.
+func chordKnowledgeContent() string {
+	const fallback = `# Chord Progression Knowledge
+bright_pop: I - V - vi - IV
+epic_minor: i - VI - III - VII
+emo_sad:    i - VI - III - VII
+Rules: Use 4-bar loop, one chord per bar, only root-position triads.`
+	data, err := os.ReadFile("knowledges/chords.md")
+	if err == nil && len(data) > 0 {
+		return string(data) + "\nChord roots must come from: " + noteMapStr + "\nCanonical note names: " + noteNamesStr
+	}
+	return fallback + "\nChord roots must come from: " + noteMapStr + "\nCanonical note names: " + noteNamesStr
+}
 
 // instrumentKnowledge is a condensed reference for the arrangement planner.
 const instrumentKnowledge = `# Instrument Knowledge
@@ -555,7 +508,7 @@ Constraints:
     "sections": [{"id": "intro", "name": "Intro", "start_bar": 0, "length_bars": 4, "energy": 0.4}],
     "chord_progression": [{"bar": 0, "chord": "Dm"}, {"bar": 1, "chord": "Bb"}, {"bar": 2, "chord": "C"}, {"bar": 3, "chord": "A"}]
   }
-}`, intentJSON, chordKnowledge, noteMapStr, noteNamesStr)
+}`, intentJSON, chordKnowledgeContent(), noteMapStr, noteNamesStr)
 }
 
 // BuildArrangementPlannerPrompt builds the prompt for the arrangement planner agent.
@@ -755,4 +708,73 @@ func StripMarkdownFences(content string) string {
 		content = content[:len(content)-3]
 	}
 	return strings.TrimSpace(content)
+}
+
+// BuildReviewerPrompt builds a prompt for the LLM music reviewer.
+// Provides structural data about each track so the LLM can give informed critique.
+func BuildReviewerPrompt(eventsByTrack map[string][]schema.NoteEvent, plan *schema.SongPlan) string {
+	var sb strings.Builder
+
+	sb.WriteString("Review this game music composition:\n\n")
+	sb.WriteString(fmt.Sprintf("Key: %s %s | BPM: %d | Bars: %d | Title: %s\n\n",
+		plan.Key.Root, plan.Key.Mode, plan.BPM, plan.TotalBars, plan.Title))
+
+	// Chord progression summary.
+	sb.WriteString("Chord progression:\n")
+	for i, c := range plan.ChordProgression {
+		sb.WriteString(fmt.Sprintf("  bar %d: %s\n", c.Bar, c.Chord))
+		if i > 15 {
+			sb.WriteString("  ... (truncated)\n")
+			break
+		}
+	}
+	sb.WriteString("\n")
+
+	// Track summaries.
+	for trackID, events := range eventsByTrack {
+		if len(events) == 0 {
+			continue
+		}
+		minP, maxP := 127, 0
+		var velSum int
+		pitchSet := make(map[int]bool)
+		for _, ev := range events {
+			if ev.Pitch < minP {
+				minP = ev.Pitch
+			}
+			if ev.Pitch > maxP {
+				maxP = ev.Pitch
+			}
+			velSum += ev.Velocity
+			pitchSet[ev.Pitch] = true
+		}
+		avgVel := velSum / len(events)
+		sb.WriteString(fmt.Sprintf("Track %q: %d notes, pitch %d-%d, avg_vel=%d, distinct_pitches=%d\n",
+			trackID, len(events), minP, maxP, avgVel, len(pitchSet)))
+	}
+	sb.WriteString("\n")
+
+	sb.WriteString(`Evaluate on 6 dimensions (1=poor, 10=excellent):
+- melody: catchiness, contour, phrase structure, memorability
+- harmony: chord variety, voice leading, tension/resolution
+- rhythm: groove, variation, syncopation, drum pattern quality
+- structure: section flow, energy arc, intro/outro quality
+- style: genre authenticity, consistency of style
+- arrangement: instrument balance, register spacing, texture
+
+Return JSON:
+{
+  "melody": <1-10>,
+  "harmony": <1-10>,
+  "rhythm": <1-10>,
+  "structure": <1-10>,
+  "style": <1-10>,
+  "arrangement": <1-10>,
+  "total": <1-10>,
+  "issues": ["specific issue 1", "specific issue 2", ...]
+}
+
+Be specific in issues — mention which track, which bars, what's wrong, and how to fix.`)
+
+	return sb.String()
 }

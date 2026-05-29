@@ -292,7 +292,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
 
       <div className="flex flex-grow overflow-hidden">
         {/* Sidebar Controls panel */}
-        <aside className="w-96 bg-surface-container-lowest border-r border-white/10 overflow-hidden p-lg flex flex-col gap-lg select-none">
+        <aside className="w-96 flex-shrink-0 bg-surface-container-lowest border-r border-white/10 overflow-hidden p-lg flex flex-col gap-lg select-none">
           {/* Tone instrument matrix */}
           <div className="flex-shrink-0">
             <h3 className="text-[10px] text-on-surface-variant uppercase tracking-widest font-semibold gap-1.5 flex items-center mb-sm">

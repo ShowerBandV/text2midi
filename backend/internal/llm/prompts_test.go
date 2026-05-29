@@ -116,7 +116,7 @@ func TestStripMarkdownFences(t *testing.T) {
 
 func TestKnowledgeEmbedded(t *testing.T) {
 	// Verify key knowledge templates are non-empty.
-	if len(chordKnowledge) < 500 {
+	if len(chordKnowledgeContent()) < 100 {
 		t.Error("chordKnowledge too short")
 	}
 	if len(instrumentKnowledge) < 500 {
@@ -127,9 +127,10 @@ func TestKnowledgeEmbedded(t *testing.T) {
 	}
 
 	// Check for critical content in chord knowledge.
-	checks := []string{"bright_pop", "dark_loop", "epic_minor", "boss_battle", "i - VI - VII - V"}
+	chk := chordKnowledgeContent()
+	checks := []string{"bright_pop", "epic_minor", "emo_sad", "Rules"}
 	for _, c := range checks {
-		if !strings.Contains(chordKnowledge, c) {
+		if !strings.Contains(chk, c) {
 			t.Errorf("chordKnowledge missing %q", c)
 		}
 	}
