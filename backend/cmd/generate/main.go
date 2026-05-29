@@ -1091,11 +1091,17 @@ func buildSectionRegister(totalBars int, energy float64) []int {
 // Returns "" if no match — caller falls back to LLM drum generation.
 func determineDrumStyle(intentMap map[string]any) string {
 	// Check style list first.
+	hasOrchestral := false
 	if styles, ok := intentMap["style"]; ok {
 		if sl, ok := styles.([]any); ok {
 			for _, s := range sl {
 				if str, ok := s.(string); ok {
 					low := strings.ToLower(str)
+					// Orchestral/epic/cinematic → don't force guitar styles.
+					if strings.Contains(low, "orchestral") || strings.Contains(low, "epic") || strings.Contains(low, "cinematic") || strings.Contains(low, "symphonic") {
+						hasOrchestral = true
+						continue
+					}
 					switch {
 					case strings.Contains(low, "metal") || strings.Contains(low, "heavy"):
 						return "metal"
@@ -1110,14 +1116,19 @@ func determineDrumStyle(intentMap map[string]any) string {
 			}
 		}
 	}
-	// Check mood.
+	if hasOrchestral {
+		return "" // let LLM handle orchestral arrangement
+	}
+	// Check mood — only apply if no orchestral override.
 	if moods, ok := intentMap["mood"]; ok {
 		if ml, ok := moods.([]any); ok {
 			for _, m := range ml {
 				if str, ok := m.(string); ok {
 					low := strings.ToLower(str)
 					if strings.Contains(low, "aggressive") || strings.Contains(low, "angry") {
-						return "metal"
+						if !hasOrchestral {
+							return "metal"
+						}
 					}
 					if strings.Contains(low, "sad") || strings.Contains(low, "melancholic") {
 						return "emo"
