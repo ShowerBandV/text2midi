@@ -15,6 +15,7 @@ import (
 	"github.com/ShowerBandV/text2midi/internal/musicdna"
 	"github.com/ShowerBandV/text2midi/internal/midi"
 	"github.com/ShowerBandV/text2midi/internal/schema"
+	"github.com/ShowerBandV/text2midi/internal/validator"
 )
 
 func main() {
@@ -31,6 +32,7 @@ func main() {
 	resume := flag.Bool("resume", false, "Resume from last checkpoint after failure (LLM mode only)")
 	pentatonic := flag.Bool("pentatonic", false, "Use pentatonic scale + Chinese ornamentation for lead melody")
 	flatVel := flag.Int("flat-vel", 0, "Force all note velocities to this value (0=disabled, e.g. 100)")
+	validate := flag.Bool("validate", false, "Run music21-style validation + auto-fix measure durations")
 	flag.Parse()
 
 	if *prompt == "" && !*local {
@@ -43,7 +45,7 @@ func main() {
 
 	// Local mode: skip LLM, use rule-based generation directly.
 	if *local {
-		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel)
+		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate)
 		return
 	}
 
@@ -466,6 +468,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── Full validator (opt-in with --validate) ──────────────────
+	if *validate {
+		report := validator.Validate(midiIR, plan.TotalBars, true) // autoFix=true
+		fmt.Print(validator.FormatReport(report))
+		if !report.Passed {
+			fmt.Fprintf(os.Stderr, "Validation FAILED with %d errors\n", len(report.Errors))
+			os.Exit(1)
+		}
+	}
+
 	result, err := midi.RenderMIDI(midiIR, outputPath, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Render: %v\n", err)
@@ -636,7 +648,7 @@ func toFloat(v any) float64 {
 
 // runLocal generates MIDI entirely via Go rule-based engines, no LLM.
 // Designed for offline use or quick iteration.
-func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int) {
+func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int, runValidate bool) {
 	fmt.Println("[Local mode] Generating without LLM...")
 
 	// ── Parse key ────────────────────────────────────────────────
@@ -715,40 +727,68 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 		return
 	}
 
-	// ── Generate tracks ──────────────────────────────────────────
+	// ── Generate tracks (parallel goroutines) ────────────────────
 	evMap := make(map[string][]schema.NoteEvent)
+	var evMu sync.Mutex
+	var wg sync.WaitGroup
+	wg.Add(4)
 
-	// Drums: style-specific patterns (metal=double-kick, punk=d-beat, emo=rim-click, etc.).
-	evMap["drums"] = composer.GenerateDrumsStyled(chordStyle, bars, energy)
-	fmt.Printf("  Drums: %d events (style=%s)\n", len(evMap["drums"]), chordStyle)
-
-	// Bass: style-specific patterns (metal=8th chug, punk=driving 8th, emo=sustained).
-	evMap["bass"] = composer.GenerateBassStyled(chordStyle, chords, bars)
-	fmt.Printf("  Bass: %d events (style=%s)\n", len(evMap["bass"]), chordStyle)
-
-	// Chords / Pad: style-specific voicings (metal/punk/rock=power chords, ambient=open).
-	blockRatio := 0.3 + energy*0.4
-	evMap["chords"] = composer.GenerateChordsStyled(chordStyle, chords, bars, blockRatio)
-	fmt.Printf("  Chords: %d events (style=%s)\n", len(evMap["chords"]), chordStyle)
-
-	// Lead melody: scale-based with stepwise bias. Step probability matches style.
-	stepProb := 0.55 + (1.0-tension)*0.3 // higher tension → more stepwise (constrained)
-	velMin := 45 + int(darkness*20)       // darker → softer floor
-	velMax := 75 + int(energy*40)         // higher energy → louder ceiling
+	// Pre-compute lead parameters.
+	stepProb := 0.55 + (1.0-tension)*0.3
+	velMin := 45 + int(darkness*20)
+	velMax := 75 + int(energy*40)
 	if velMax > 115 {
 		velMax = 115
 	}
 	secDensity := buildSectionDensity(bars, energy)
 	secRegister := buildSectionRegister(bars, energy)
-	if chordStyle == "metal" {
-		evMap["lead"] = composer.GenerateLeadMetal(keyRoot, bars, energy)
-	} else if chordStyle == "pop" || chordStyle == "rpg" {
-		// John Legend: piano handles melody + chord voicing. Pad stays as texture layer.
-		evMap["lead"] = composer.GeneratePianoLegend(keyRoot, keyMode, bars, chords)
-	} else {
-		evMap["lead"] = composer.GenerateLeadMidra(keyRoot, keyMode, bars, stepProb, velMin, velMax, secDensity, secRegister, pentatonic)
-	}
-	fmt.Printf("  Lead (raw): %d events\n", len(evMap["lead"]))
+	blockRatio := 0.3 + energy*0.4
+
+	go func() {
+		defer wg.Done()
+		d := composer.GenerateDrumsStyled(chordStyle, bars, energy)
+		evMu.Lock()
+		evMap["drums"] = d
+		fmt.Printf("  Drums: %d events (style=%s)\n", len(d), chordStyle)
+		evMu.Unlock()
+	}()
+
+	go func() {
+		defer wg.Done()
+		b := composer.GenerateBassStyled(chordStyle, chords, bars)
+		evMu.Lock()
+		evMap["bass"] = b
+		fmt.Printf("  Bass: %d events (style=%s)\n", len(b), chordStyle)
+		evMu.Unlock()
+	}()
+
+	go func() {
+		defer wg.Done()
+		c := composer.GenerateChordsStyled(chordStyle, chords, bars, blockRatio)
+		evMu.Lock()
+		evMap["chords"] = c
+		fmt.Printf("  Chords: %d events (style=%s)\n", len(c), chordStyle)
+		evMu.Unlock()
+	}()
+
+	go func() {
+		defer wg.Done()
+		var l []schema.NoteEvent
+		switch {
+		case chordStyle == "metal":
+			l = composer.GenerateLeadMetal(keyRoot, bars, energy)
+		case chordStyle == "pop" || chordStyle == "rpg":
+			l = composer.GeneratePianoLegend(keyRoot, keyMode, bars, chords)
+		default:
+			l = composer.GenerateLeadMidra(keyRoot, keyMode, bars, stepProb, velMin, velMax, secDensity, secRegister, pentatonic)
+		}
+		evMu.Lock()
+		evMap["lead"] = l
+		fmt.Printf("  Lead (raw): %d events\n", len(l))
+		evMu.Unlock()
+	}()
+
+	wg.Wait()
 
 	// Apply melody grammar for musicality.
 	grammar := composer.NewMelodyGrammar(keyRoot, keyMode)
@@ -846,6 +886,16 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 	if err := validateMidiIR(midiIR); err != nil {
 		fmt.Fprintf(os.Stderr, "Validation FAILED: %v\n", err)
 		os.Exit(1)
+	}
+
+	// ── Full validator (opt-in with --validate) ──────────────────
+	if runValidate {
+		report := validator.Validate(midiIR, bars, true)
+		fmt.Print(validator.FormatReport(report))
+		if !report.Passed {
+			fmt.Fprintf(os.Stderr, "Validation FAILED with %d errors\n", len(report.Errors))
+			os.Exit(1)
+		}
 	}
 
 	result, err := midi.RenderMIDI(midiIR, outputPath, nil)
