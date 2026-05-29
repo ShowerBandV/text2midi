@@ -29,6 +29,8 @@ func main() {
 	refine := flag.Bool("refine", false, "Enable LLM-based reviewer + iterative refinement (costs extra tokens)")
 	dryRun := flag.Bool("dry-run", false, "Stop after plan stage — print plan summary and exit (LLM mode only)")
 	resume := flag.Bool("resume", false, "Resume from last checkpoint after failure (LLM mode only)")
+	pentatonic := flag.Bool("pentatonic", false, "Use pentatonic scale + Chinese ornamentation for lead melody")
+	flatVel := flag.Int("flat-vel", 0, "Force all note velocities to this value (0=disabled, e.g. 100)")
 	flag.Parse()
 
 	if *prompt == "" && !*local {
@@ -41,7 +43,7 @@ func main() {
 
 	// Local mode: skip LLM, use rule-based generation directly.
 	if *local {
-		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun)
+		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel)
 		return
 	}
 
@@ -454,6 +456,11 @@ func main() {
 	os.MkdirAll(outputPath+"/../stems", 0755)
 	composer.ExportStems(midiIR, outputPath+"/../stems", name, nil)
 
+	// ── Flat velocity override ──────────────────────────────────
+	if *flatVel > 0 {
+		flattenVelocities(evMap, *flatVel)
+	}
+
 	if err := validateMidiIR(midiIR); err != nil {
 		fmt.Fprintf(os.Stderr, "Validation FAILED: %v\n", err)
 		os.Exit(1)
@@ -629,7 +636,7 @@ func toFloat(v any) float64 {
 
 // runLocal generates MIDI entirely via Go rule-based engines, no LLM.
 // Designed for offline use or quick iteration.
-func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool) {
+func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int) {
 	fmt.Println("[Local mode] Generating without LLM...")
 
 	// ── Parse key ────────────────────────────────────────────────
@@ -733,7 +740,11 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 	}
 	secDensity := buildSectionDensity(bars, energy)
 	secRegister := buildSectionRegister(bars, energy)
-	evMap["lead"] = composer.GenerateLeadMidra(keyRoot, keyMode, bars, stepProb, velMin, velMax, secDensity, secRegister)
+	if chordStyle == "metal" {
+		evMap["lead"] = composer.GenerateLeadMetal(keyRoot, bars, energy)
+	} else {
+		evMap["lead"] = composer.GenerateLeadMidra(keyRoot, keyMode, bars, stepProb, velMin, velMax, secDensity, secRegister, pentatonic)
+	}
 	fmt.Printf("  Lead (raw): %d events\n", len(evMap["lead"]))
 
 	// Apply melody grammar for musicality.
@@ -784,7 +795,14 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 
 	// Counter-melody / texture layer (strings, etc.).
 	if layout.counter && ch < 9 {
-		counter := composer.GenerateCounterMelody(evMap["lead"], bars)
+		var counter []schema.NoteEvent
+		if chordStyle == "pop" || chordStyle == "rpg" {
+			counter = composer.GenerateStringsLayered(evMap["lead"], bars)
+		} else if chordStyle == "metal" {
+			counter = composer.GenerateTwinHarmony(evMap["lead"], bars)
+		} else {
+			counter = composer.GenerateCounterMelody(evMap["lead"], bars)
+		}
 		if len(counter) > 0 {
 			trackList = append(trackList, schema.TrackIR{
 				ID: "counter", Name: layout.counterName, Channel: ch, Program: intPtr(layout.counterProg),
@@ -792,6 +810,11 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 			})
 			fmt.Printf("  %s (counter): %d events\n", layout.counterName, len(counter))
 		}
+	}
+
+	// ── Flat velocity override ──────────────────────────────────
+	if flatVel > 0 {
+		flattenVelocities(evMap, flatVel)
 	}
 
 	// ── Apply section dynamics ───────────────────────────────────
@@ -849,7 +872,7 @@ func styleProfile(style string) (darkness, energy, rhythmic, tension float64, de
 	case strings.Contains(s, "trap") || strings.Contains(s, "hip"):
 		return 0.55, 0.55, 0.65, 0.40, 140, 16, "trap"
 	case strings.Contains(s, "metal") || strings.Contains(s, "heavy"):
-		return 0.80, 0.85, 0.55, 0.65, 160, 32, "metal"
+		return 0.80, 0.85, 0.55, 0.65, 160, 72, "metal" // 72 bars ≈ 1:48 at 160bpm
 	case strings.Contains(s, "rock"):
 		return 0.45, 0.70, 0.35, 0.40, 130, 24, "rock"
 	case strings.Contains(s, "pop"):
@@ -875,6 +898,14 @@ func progForStyle(root, mode string, totalBars int, chordStyle string) []string 
 			// i - VII - i - VI (static, floating)
 			base := []string{root + "m", intervalChord(root, 10), root + "m", intervalChord(root, 8)}
 			return repeatChords(base, totalBars)
+		case "trap":
+			// i - bVI - bVII - i (dark trap loop).
+			base := []string{root + "m", intervalChord(root, 8), intervalChord(root, 10), root + "m"}
+			return repeatChords(base, totalBars)
+		case "metal":
+			// i - bVI - bVII - i (metal: dark, chromatic, not the pop minor loop).
+			base := []string{root + "m", intervalChord(root, 8), intervalChord(root, 10), root + "m"}
+			return repeatChords(base, totalBars)
 		default:
 			// i - bVI - bIII - bVII (classic minor loop)
 			base := []string{root + "m", intervalChord(root, 8), intervalChord(root, 3), intervalChord(root, 10)}
@@ -884,8 +915,8 @@ func progForStyle(root, mode string, totalBars int, chordStyle string) []string 
 	// Major
 	switch chordStyle {
 	case "pop":
-		// I - vi - IV - V (classic pop)
-		base := []string{root, relativeMinor(root), fourthOf(root), fifthOf(root)}
+		// Rich pop: I - vi7 - IVmaj7 - V7 (John Legend colors).
+		base := []string{root + "maj7", relativeMinor(root) + "7", fourthOf(root) + "maj7", fifthOf(root) + "7"}
 		return repeatChords(base, totalBars)
 	case "rock":
 		// I - IV - V - IV
@@ -1069,6 +1100,87 @@ func chordsFromPlan(plan *schema.SongPlan) []string {
 	return chords
 }
 
+// applyOrchestrationCurve fades instruments in/out per section.
+// Intro: only 1-2 instruments. Verse: add bass. Chorus: full band.
+// Simulates real arrangement build-up by reducing velocity of "inactive" tracks.
+func applyOrchestrationCurve(evMap map[string][]schema.NoteEvent, totalBars int, style string) {
+	// Per-style track activation schedule: which bars each track plays at full volume.
+	type trackEntry struct {
+		key          string
+		startBar     int  // bar at which this track enters
+		soloIntro    bool // if true, this track plays solo in intro
+	}
+	var schedule []trackEntry
+	switch style {
+	case "punk", "metal", "rock":
+		// Guitar-driven: intro = rhythm guitar solo → verse + drums → chorus + bass + lead.
+		schedule = []trackEntry{
+			{key: "chords", startBar: 0, soloIntro: true},   // rhythm guitar from start
+			{key: "drums", startBar: 4},                       // drums enter verse
+			{key: "bass", startBar: 8},                        // bass enters chorus
+			{key: "lead", startBar: 8},                        // lead enters chorus
+		}
+	case "emo", "rpg", "pop":
+		// Piano-driven: intro = piano solo → verse + pad + bass → chorus + drums + strings.
+		schedule = []trackEntry{
+			{key: "lead", startBar: 0, soloIntro: true},
+			{key: "chords", startBar: 2},
+			{key: "bass", startBar: 4},
+			{key: "drums", startBar: 8},
+		}
+	default:
+		// Default: everything from bar 0 (no subtraction).
+		return
+	}
+
+	// Build a set of which tracks are active at which bar.
+	for _, entry := range schedule {
+		evs := evMap[entry.key]
+		if evs == nil {
+			continue
+		}
+		for i := range evs {
+			bar := int(evs[i].StartBeat) / 4
+			if bar < entry.startBar {
+				if entry.soloIntro && bar < entry.startBar && bar < 4 {
+					// Solo instrument in intro: keep full volume.
+				} else {
+					// Not yet entered: reduce to near-silent.
+					evs[i].Velocity = int(float64(evs[i].Velocity) * 0.1)
+				}
+			} else if bar < entry.startBar+2 {
+				// Fade in over 2 bars.
+				fadeProgress := float64(bar-entry.startBar) / 2.0
+				evs[i].Velocity = int(float64(evs[i].Velocity) * (0.3 + fadeProgress*0.7))
+			}
+			// Clamp.
+			if evs[i].Velocity < 4 {
+				evs[i].Velocity = 4
+			}
+			if evs[i].Velocity > 127 {
+				evs[i].Velocity = 127
+			}
+		}
+	}
+
+	// Print the schedule.
+	fmt.Printf("  [Orch] arrangement arc: ")
+	for _, e := range schedule {
+		fmt.Printf("%s@%d ", e.key, e.startBar)
+	}
+	fmt.Println()
+}
+
+// flattenVelocities sets all note velocities to a fixed value.
+func flattenVelocities(evMap map[string][]schema.NoteEvent, vel int) {
+	for _, evs := range evMap {
+		for i := range evs {
+			evs[i].Velocity = vel
+		}
+	}
+	fmt.Printf("  [FlatVel] all notes → velocity %d\n", vel)
+}
+
 func sanitizeName(s string) string {
 	// Replace problematic filename chars with underscores.
 	s = strings.Map(func(r rune) rune {
@@ -1130,12 +1242,13 @@ func trackLayout(style string) trackLayoutConfig {
 			leadName: "Lead Gtr", leadProg: 29, // Overdrive Guitar
 		}
 	case "metal":
-		// Metal: drums + bass + rhythm guitar + lead guitar. No pad, no strings.
+		// Metal: drums + bass + rhythm guitar + lead guitar + harmony guitar (twin lead).
 		return trackLayoutConfig{
-			drums: true, bass: true, rhythm: true, lead: true, counter: false,
-			bassProg: 34, // Electric Bass (pick)
-			rhythmName: "Rhythm Gtr", rhythmProg: 30, rhythmVol: 100, // Distortion
-			leadName: "Lead Gtr", leadProg: 30, // Distortion Guitar
+			drums: true, bass: true, rhythm: true, lead: true, counter: true,
+			bassProg: 34,
+			rhythmName: "Rhythm Gtr", rhythmProg: 30, rhythmVol: 100,
+			leadName: "Lead Gtr", leadProg: 30,
+			counterName: "Harmony Gtr", counterProg: 29, counterVol: 95, // Overdrive for harmony
 		}
 	case "rock":
 		// Rock: drums + bass + rhythm guitar + lead guitar. No pad, no strings.

@@ -282,31 +282,164 @@ func (m *MotifExtractor) applyVariation(motif []schema.NoteEvent, varType Variat
 	return motif
 }
 
-// GenerateCounterMelody creates a secondary melody that harmonizes with the lead.
-// Uses mostly 3rds and 6ths below the lead melody, with occasional unison/octave.
+// GenerateStringsLayered creates layered string parts that vary by section.
+// Verse: 1 violin long notes. Pre: +2nd violin. Chorus: full strings swell.
+func GenerateStringsLayered(leadNotes []schema.NoteEvent, totalBars int) []schema.NoteEvent {
+	if len(leadNotes) < 4 {
+		return nil
+	}
+	rng := rand.New(rand.NewSource(44))
+	var events []schema.NoteEvent
+
+	// Group lead notes by section.
+	for _, n := range leadNotes {
+		bar := int(n.StartBeat) / 4
+		isIntro := bar < 4
+		isPre := bar >= 4 && bar < 8
+		isChorus := bar >= 8
+
+		if isIntro {
+			// Intro: just a single long note per 2 bars — sparse.
+			if bar%2 == 0 && int(n.StartBeat*2)%8 == 0 {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: n.Pitch - 12,
+					StartBeat: n.StartBeat, DurationBeat: 3.5,
+					Velocity: 40,
+				})
+			}
+			continue
+		}
+
+		if isPre {
+			// Pre-chorus: two-note harmony, more movement.
+			if rng.Float64() < 0.3 {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: n.Pitch - 8,
+					StartBeat: n.StartBeat, DurationBeat: 1.5,
+					Velocity: 55,
+				})
+			}
+			continue
+		}
+
+		if isChorus {
+			// Chorus: full strings — multiple layers, swells.
+			// Low strings (cello): root notes, long.
+			if bar%2 == 0 {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: n.Pitch - 24,
+					StartBeat: float64(bar)*4.0, DurationBeat: 7.5,
+					Velocity: 60,
+				})
+			}
+			// High strings: counter-melody fragments.
+			if rng.Float64() < 0.4 {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: n.Pitch + 12,
+					StartBeat: n.StartBeat + 0.2, DurationBeat: 0.8,
+					Velocity: 55,
+				})
+			}
+		}
+	}
+	fmt.Printf("[Strings-Layered] %d events across sections\n", len(events))
+	return events
+}
+
+// GenerateTwinHarmony creates tight parallel guitar harmony — Bodom style twin lead.
+// Modes: parallel 3rd/6th (verse) → octave unison (chorus) → contrary motion (solo sections).
+func GenerateTwinHarmony(leadNotes []schema.NoteEvent, totalBars int) []schema.NoteEvent {
+	if len(leadNotes) < 4 {
+		return nil
+	}
+	rng := rand.New(rand.NewSource(45))
+	var harmony []schema.NoteEvent
+	for i, n := range leadNotes {
+		bar := int(n.StartBeat) / 4
+		isChorus := bar >= 8 && bar%8 < 4
+		isSolo := bar%8 == 6 || bar%8 == 7
+
+		interval := -3 // default: minor 3rd below
+
+		if isSolo {
+			// Solo section: octave unison — double the lead for power.
+			interval = -12
+		} else if isChorus {
+			// Chorus: contrary motion — you go up, I go down.
+			if i > 0 {
+				prevLead := leadNotes[i-1].Pitch
+				if n.Pitch > prevLead {
+					interval = -4 // lead up → harmony down
+				} else {
+					interval = +3 // lead down → harmony up
+				}
+			}
+			// Occasionally octave below for wall-of-sound.
+			if rng.Float64() < 0.15 {
+				interval = -12
+			}
+		} else {
+			// Verse: parallel 3rd/6th.
+			switch i % 5 {
+			case 0:
+				interval = -4 // major 3rd
+			case 2:
+				interval = -8 // minor 6th
+			default:
+				interval = -3 // minor 3rd
+			}
+		}
+
+		hPitch := n.Pitch + interval
+		if hPitch < 36 {
+			hPitch += 12
+		}
+		if hPitch > 96 {
+			hPitch -= 12
+		}
+
+		harmony = append(harmony, schema.NoteEvent{
+			Type: "note", Pitch: hPitch,
+			StartBeat: n.StartBeat, DurationBeat: n.DurationBeat,
+			Velocity: n.Velocity - 5,
+		})
+	}
+	fmt.Printf("[TwinHarmony] %d notes (parallel/octave/contrary)\n", len(harmony))
+	return harmony
+}
+
+// GenerateCounterMelody creates an independent secondary melody that harmonizes with the lead.
+// Unlike simple parallel harmony, it has its own rhythm, contrary motion, and delayed entries.
 func GenerateCounterMelody(leadNotes []schema.NoteEvent, totalBars int) []schema.NoteEvent {
 	if len(leadNotes) < 4 {
 		return nil
 	}
 
-	// Create a sparser, lower counter-melody.
-	// Pick every 2nd or 3rd note from lead and harmonize at a 3rd or 6th below.
+	rng := rand.New(rand.NewSource(43))
 	var counter []schema.NoteEvent
 	noteCount := 0
 
 	for i, n := range leadNotes {
-		// Only harmonize ~40% of lead notes (sparser than lead).
-		if i%3 != 0 {
+		// Only trigger on ~30% of lead notes (sparser independence).
+		if i%4 != 0 && rng.Float64() > 0.25 {
 			continue
 		}
 
-		// Pick interval: prefer 3rd or 6th below.
-		interval := -3 // minor third below
-		if (i/3)%2 == 0 {
-			interval = -4 // major third below
-		}
-		if (i/3)%3 == 0 {
-			interval = -8 // minor sixth below
+		// Interval: prefer 3rd/6th below, but occasionally use contrary motion.
+		interval := -3
+		switch rng.Intn(6) {
+		case 0:
+			interval = -4 // major 3rd below
+		case 1:
+			interval = -8 // minor 6th below
+		case 2:
+			interval = -5 // 4th below
+		case 3:
+			interval = +4 // major 3rd ABOVE (contrary color)
+		case 4:
+			interval = -12 // octave below (doubling)
+		case 5:
+			interval = -2 // 2nd below (tension)
 		}
 
 		counterPitch := n.Pitch + interval
@@ -317,22 +450,42 @@ func GenerateCounterMelody(leadNotes []schema.NoteEvent, totalBars int) []schema
 			counterPitch -= 12
 		}
 
-		// Slightly behind the lead for "echo" effect.
+		// Independent rhythm: sometimes long held notes, sometimes short answers.
 		delay := 0.0
-		if noteCount > 0 && noteCount%2 == 0 {
-			delay = 0.08 // slight delay for call-response feel
+		dur := n.DurationBeat * 1.5
+		switch noteCount % 5 {
+		case 0:
+			delay = 0.0 // on the beat
+			dur = 2.0   // long held
+		case 1:
+			delay = 0.25 // eighth-note behind
+			dur = 0.4
+		case 2:
+			delay = 0.5 // half beat behind (call-response)
+			dur = 0.6
+		case 3:
+			delay = 0.0
+			dur = 0.15 // short staccato answer
+		case 4:
+			continue // rest — skip this note entirely
+		}
+
+		// Only enter after bar 2 (let the lead establish itself first).
+		bar := int(n.StartBeat) / 4
+		if bar < 2 {
+			continue
 		}
 
 		counter = append(counter, schema.NoteEvent{
 			Type: n.Type, Pitch: counterPitch,
 			StartBeat:    n.StartBeat + delay,
-			DurationBeat: n.DurationBeat * 1.2, // slightly longer
-			Velocity:     n.Velocity - 15,       // quieter than lead
+			DurationBeat: dur,
+			Velocity:     n.Velocity - 20, // quieter than lead
 		})
 		noteCount++
 	}
 
-	fmt.Printf("[CounterMelody] generated %d notes (harmonizing lead %d)\n", len(counter), len(leadNotes))
+	fmt.Printf("[CounterMelody] generated %d independent notes (lead has %d)\n", len(counter), len(leadNotes))
 	return counter
 }
 
