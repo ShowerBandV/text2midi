@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import Navbar from "./components/Navbar";
-import PianoRoll from "./components/PianoRoll";
 import Library from "./components/Library";
 import { MidiNote, InstrumentType, MidiTrack, MidiMetadata } from "./types";
 import {
@@ -95,7 +94,7 @@ const INITIAL_TRACKS: MidiTrack[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"generate" | "editor" | "library">("generate");
+  const [activeTab, setActiveTab] = useState<"generate" | "library">("generate");
   const [prompt, setPrompt] = useState("");
   
   // Synthesizer Parameter State variables (defaults to values of first tracks)
@@ -149,17 +148,6 @@ export default function App() {
     return () => clearInterval(timer);
   }, [isGenerating]);
 
-  // Handles loading track into Editor timeline
-  const handleLoadTrackIntoEditor = (track: MidiTrack) => {
-    setActiveTrackId(track.id);
-    setNotes(track.notes);
-    setTempo(track.metadata.tempo);
-    setRootKey(track.metadata.key);
-    setScaleType(track.metadata.scale);
-    setInstrument(track.instrument);
-    setGlobalVelocity(track.globalVelocity);
-    setActiveTab("editor");
-  };
 
   // Preset prompts clicking handles
   const handleApplyPresetGroup = (pText: string, tBpm: number, rKey: string, sScale: string) => {
@@ -417,25 +405,7 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === "editor" && (
-            <div className="h-full border border-white/10 rounded-xl overflow-hidden glass-panel flex flex-col shadow-2xl">
-              <PianoRoll
-                notes={notes}
-                setNotes={setNotes}
-                tempo={tempo}
-                setTempo={setTempo}
-                rootKey={rootKey}
-                setRootKey={setRootKey}
-                scaleType={scaleType}
-                setScaleType={setScaleType}
-                instrument={instrument}
-                setInstrument={setInstrument}
-                globalVelocity={globalVelocity}
-                setGlobalVelocity={setGlobalVelocity}
-                title={tracks.find(t => t.id === activeTrackId)?.metadata.title || "Untitled"}
-              />
-            </div>
-          )}
+          
 
           {activeTab === "library" && (
             <div className="mt-4">
@@ -444,7 +414,7 @@ export default function App() {
                 setTracks={setTracks}
                 activeTrackId={activeTrackId}
                 setActiveTrackId={setActiveTrackId}
-                onSelectTrackForEditor={handleLoadTrackIntoEditor}
+                
               />
             </div>
           )}

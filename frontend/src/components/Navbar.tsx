@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { Sparkles, Library as LibIcon, Piano, Wallet, LogIn, Disc } from "lucide-react";
 
 interface NavbarProps {
-  activeTab: "generate" | "editor" | "library";
-  setActiveTab: (tab: "generate" | "editor" | "library") => void;
+  activeTab: "generate" | "library";
+  setActiveTab: (tab: "generate" | "library") => void;
 }
 
 export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
@@ -52,17 +52,6 @@ export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
           >
             <Sparkles className="w-4 h-4" />
             Generate
-          </button>
-          <button
-            onClick={() => setActiveTab("editor")}
-            className={`flex items-center gap-2 pb-1 text-sm font-medium tracking-wide border-b-2 hover:text-white transition-all cursor-pointer ${
-              activeTab === "editor"
-                ? "border-primary text-primary"
-                : "border-transparent text-on-surface-variant hover:border-white/20"
-            }`}
-          >
-            <Piano className="w-4 h-4" />
-            Editor
           </button>
           <button
             onClick={() => setActiveTab("library")}
