@@ -31,7 +31,7 @@ func main() {
 	dryRun := flag.Bool("dry-run", false, "Stop after plan stage — print plan summary and exit (LLM mode only)")
 	resume := flag.Bool("resume", false, "Resume from last checkpoint after failure (LLM mode only)")
 	pentatonic := flag.Bool("pentatonic", false, "Use pentatonic scale + Chinese ornamentation for lead melody")
-	flatVel := flag.Int("flat-vel", 0, "Force all note velocities to this value (0=disabled, e.g. 100)")
+	flatVel := flag.Int("flat-vel", 100, "Force all note velocities to this value (0=disabled)")
 	validate := flag.Bool("validate", false, "Run music21-style validation + auto-fix measure durations")
 	flag.Parse()
 
@@ -443,6 +443,11 @@ func main() {
 	outputPath := *out + "/" + name + ".mid"
 	os.MkdirAll(*out, 0755)
 
+	// ── Flat velocity (MUST be before midiIR construction) ────
+	if *flatVel > 0 {
+		flattenVelocities(evMap, *flatVel)
+	}
+
 	midiIR := schema.MidiIR{
 		Meta: schema.Meta{
 			TicksPerBeat:  480,
@@ -457,11 +462,6 @@ func main() {
 	// --- Stem export ---
 	os.MkdirAll(outputPath+"/../stems", 0755)
 	composer.ExportStems(midiIR, outputPath+"/../stems", name, nil)
-
-	// ── Flat velocity override ──────────────────────────────────
-	if *flatVel > 0 {
-		flattenVelocities(evMap, *flatVel)
-	}
 
 	if err := validateMidiIR(midiIR); err != nil {
 		fmt.Fprintf(os.Stderr, "Validation FAILED: %v\n", err)
@@ -859,14 +859,14 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 		}
 	}
 
-	// ── Flat velocity override ──────────────────────────────────
-	if flatVel > 0 {
-		flattenVelocities(evMap, flatVel)
-	}
-
 	// ── Apply section dynamics ───────────────────────────────────
 	structure := composer.SelectStructure(energy, "rpg")
 	composer.ApplyStructure(evMap, structure, bars)
+
+	// ── Flat velocity (MUST be last, after all post-processing) ──
+	if flatVel > 0 {
+		flattenVelocities(evMap, flatVel)
+	}
 
 	// ── Render MIDI ──────────────────────────────────────────────
 	midiIR := schema.MidiIR{
