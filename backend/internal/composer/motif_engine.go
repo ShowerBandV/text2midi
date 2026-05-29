@@ -5,6 +5,7 @@ package composer
 import (
 	"fmt"
 	"math/rand"
+	"strings"
 
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
@@ -456,6 +457,198 @@ func GenerateLeadMetal(keyRoot string, totalBars int, energy float64) []schema.N
 }
 
 // getDiminishedDegrees returns MIDI pitches for a diminished 7th arpeggio (1-b3-b5-bb7).
+// GeneratePianoLegend creates a John Legend-style piano part: left hand bass + right hand chords + melody.
+// Section-aware: sparse intro → building verse → full chorus → featured bridge → sparse outro.
+func GeneratePianoLegend(keyRoot, keyMode string, totalBars int, chords []string) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(42))
+	var events []schema.NoteEvent
+
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+		sec := songSection(bar, totalBars)
+		chord := chords[bar%len(chords)]
+		root := chordRootMIDIPiano(chord, 2) // C2-C3 for left hand
+
+		switch sec {
+		// ── INTRO: Solo piano, sparse, establishing the mood ──
+		case "intro":
+			// Left hand: single bass note, held.
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: root,
+				StartBeat: base, DurationBeat: 3.8,
+				Velocity: 40,
+			})
+			// Right hand: one or two chord tones, floating.
+			rhNotes := chordTones(chord, 3, 2)
+			for i, p := range rhNotes {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p,
+					StartBeat: base + float64(i)*2.0, DurationBeat: 1.8,
+					Velocity: 50,
+				})
+			}
+
+		// ── VERSE: Left hand movement + right hand sparse chords ──
+		case "verse":
+			// Left hand: root → 5th → octave pattern.
+			lhPattern := []struct {
+				beat float64
+				pitch int
+				dur   float64
+			}{
+				{0.0, root, 1.5},
+				{2.0, root + 7, 1.5},
+			}
+			if bar%2 == 1 {
+				lhPattern[1].pitch = root + 12
+			}
+			for _, lh := range lhPattern {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: lh.pitch,
+					StartBeat: base + lh.beat, DurationBeat: lh.dur,
+					Velocity: 55,
+				})
+			}
+			// Right hand: sparse chord stabs on 2 and 4.
+			if bar%2 == 0 {
+				rh := chordTones(chord, 3, 3)
+				for _, beat := range []float64{1.0, 3.0} {
+					for _, p := range rh {
+						events = append(events, schema.NoteEvent{
+							Type: "note", Pitch: p,
+							StartBeat: base + beat, DurationBeat: 0.5,
+							Velocity: 60,
+						})
+					}
+				}
+			}
+
+		// ── CHORUS: Full piano — left hand octaves, right hand rich chords ──
+		case "chorus", "chorus2":
+			// Left hand: octaves on 1 and 3.
+			for _, beat := range []float64{0.0, 2.0} {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: root,
+					StartBeat: base + beat, DurationBeat: 1.5,
+					Velocity: 75,
+				})
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: root + 12,
+					StartBeat: base + beat, DurationBeat: 1.5,
+					Velocity: 70,
+				})
+			}
+			// Right hand: full chord voicing on every beat.
+			rh := chordTones(chord, 3, 4)
+			for _, beat := range []float64{0.0, 1.0, 2.0, 3.0} {
+				for _, p := range rh {
+					events = append(events, schema.NoteEvent{
+						Type: "note", Pitch: p,
+						StartBeat: base + beat, DurationBeat: 0.7,
+						Velocity: 80,
+					})
+				}
+			}
+			// Melody fragment: a quick pentatonic run on beat 3&.
+			if bar%2 == 0 {
+				mel := []int{root + 12, root + 16, root + 19, root + 24}
+				for i, p := range mel {
+					events = append(events, schema.NoteEvent{
+						Type: "note", Pitch: p,
+						StartBeat: base + 2.5 + float64(i)*0.15, DurationBeat: 0.12,
+						Velocity: 85,
+					})
+				}
+			}
+
+		// ── BRIDGE: Piano feature — expressive, melodic ───────
+		case "bridge":
+			// Left hand: arpeggiated pattern.
+			lhArp := []int{root, root + 7, root + 12, root + 7}
+			for i, p := range lhArp {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p,
+					StartBeat: base + float64(i)*0.8, DurationBeat: 0.6,
+					Velocity: 65,
+				})
+			}
+			// Right hand: melodic phrase — improvisatory.
+			rhMel := []int{
+				root + 12, root + 16, root + 19,
+				root + 16, root + 12, root + 7 + 12,
+			}
+			for i, p := range rhMel {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p,
+					StartBeat: base + 1.5 + float64(i)*0.3, DurationBeat: 0.25,
+					Velocity: 70 + rng.Intn(20),
+				})
+			}
+
+		// ── OUTRO: Sparse, returning to intro feel ──────────
+		case "outro":
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: root,
+				StartBeat: base, DurationBeat: 3.8,
+				Velocity: 35,
+			})
+			rh := chordTones(chord, 3, 1)
+			if len(rh) > 0 {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: rh[0],
+					StartBeat: base + 1.0, DurationBeat: 2.5,
+					Velocity: 40,
+				})
+			}
+		}
+	}
+
+	fmt.Printf("[Piano-Legend] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
+// chordTones returns n MIDI pitches representing chord tones at a given octave.
+func chordTones(chord string, octave int, n int) []int {
+	root := chordRootMIDIPiano(chord, octave)
+	isMinor := strings.Contains(chord, "m")
+	third := root + 4
+	if isMinor {
+		third = root + 3
+	}
+	fifth := root + 7
+	tones := []int{root, third, fifth, root + 12, fifth + 12}
+	if n > len(tones) {
+		n = len(tones)
+	}
+	return tones[:n]
+}
+
+// chordRootMIDIPiano strips chord suffixes to get the root MIDI pitch.
+func chordRootMIDIPiano(chord string, octave int) int {
+	root := chord
+	for {
+		trimmed := false
+		for _, suf := range []string{"maj7", "min7", "m7", "sus4", "sus2", "dim", "aug", "7", "m", "M"} {
+			if strings.HasSuffix(root, suf) && len(root) > len(suf) {
+				root = root[:len(root)-len(suf)]
+				trimmed = true
+				break
+			}
+		}
+		if !trimmed {
+			break
+		}
+	}
+	rootSemi := map[string]int{
+		"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5,
+		"F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11,
+	}
+	if rs, ok := rootSemi[root]; ok {
+		return (octave+1)*12 + rs
+	}
+	return 36
+}
+
 func getDiminishedDegrees(root string) []int {
 	rootSemi := map[string]int{
 		"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5,
