@@ -34,6 +34,7 @@ func main() {
 	validate := flag.Bool("validate", false, "Run music21-style validation + auto-fix measure durations")
 	seed := flag.Int64("seed", 0, "Random seed (0=random per run, otherwise deterministic)")
 	loopable := flag.Bool("loopable", false, "Make outro connect seamlessly to intro for game loop")
+	progression := flag.String("progression", "", "Chord progression: warm/dark/hopeful/epic/tense/bright (overrides style default)")
 	flag.Parse()
 
 	if *prompt == "" && !*local {
@@ -47,7 +48,7 @@ func main() {
 	// Local mode: skip LLM, use rule-based generation directly.
 	if *local {
 		composer.SetGlobalSeed(*seed)
-		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate, *loopable)
+		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate, *loopable, *progression)
 		return
 	}
 	composer.SetGlobalSeed(*seed)
@@ -651,7 +652,7 @@ func toFloat(v any) float64 {
 
 // runLocal generates MIDI entirely via Go rule-based engines, no LLM.
 // Designed for offline use or quick iteration.
-func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int, runValidate bool, loopable bool) {
+func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int, runValidate bool, loopable bool, progression string) {
 	fmt.Println("[Local mode] Generating without LLM...")
 
 	// ── Parse key ────────────────────────────────────────────────
@@ -689,6 +690,9 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 
 	// ── Chord progression ────────────────────────────────────────
 	chords := progForStyle(keyRoot, keyMode, bars, chordStyle)
+	if progression != "" {
+		chords = progTemplate(keyRoot, keyMode, bars, progression)
+	}
 
 	// ── Dry-run: print plan and exit ─────────────────────────────
 	if dryRun {
@@ -1010,6 +1014,34 @@ func progForStyle(root, mode string, totalBars int, chordStyle string) []string 
 		base := []string{root, fifthOf(root), relativeMinor(root), fourthOf(root)}
 		return repeatChords(base, totalBars)
 	}
+}
+
+// progTemplate returns a chord progression from a named emotional template.
+func progTemplate(root, mode string, totalBars int, name string) []string {
+	type template struct {
+		degrees []int // semitone offsets from root
+	}
+	templates := map[string]template{
+		"warm":    {[]int{0, 9, 4, 7}},     // I-vi-IV-V
+		"dark":    {[]int{0, 8, 10, 0}},    // i-bVI-bVII-i
+		"hopeful": {[]int{5, 0, 7, 4}},     // IV-I-V-vi
+		"epic":    {[]int{0, 8, 3, 10}},    // i-bVI-bIII-bVII
+		"tense":   {[]int{0, 1, 0, 0}},     // i-bII-i
+		"bright":  {[]int{0, 7, 9, 5}},     // I-V-vi-IV
+	}
+	t, ok := templates[name]
+	if !ok {
+		return nil
+	}
+	base := make([]string, len(t.degrees))
+	for i, d := range t.degrees {
+		base[i] = intervalChord(root, d)
+		if mode == "minor" && (name == "warm" || name == "hopeful" || name == "bright") {
+			// minor mode: convert major progressions to relative minor
+			base[i] = intervalChord(root, d)
+		}
+	}
+	return repeatChords(base, totalBars)
 }
 
 func repeatChords(base []string, totalBars int) []string {
