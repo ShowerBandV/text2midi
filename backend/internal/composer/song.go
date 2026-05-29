@@ -282,8 +282,13 @@ func GenerateDrumsMidra(totalBars int, densityFactor float64) []schema.NoteEvent
 	rng := rand.New(rand.NewSource(42))
 	motifLen := 8
 	hatMotif := make([]int, motifLen)
+	// densityFactor controls hi-hat activity (0=sparse, 1=dense)
 	for i := range hatMotif {
-		hatMotif[i] = rng.Intn(2)
+		if rng.Float64() < densityFactor {
+			hatMotif[i] = 1
+		} else {
+			hatMotif[i] = 0
+		}
 	}
 	hatMotif[0] = 1
 	hatMotif[motifLen-1] = rng.Intn(2)
@@ -350,7 +355,7 @@ func sortedUniqueFloats(s []float64) []float64 {
 
 // GenerateChordsMidra is a Go port of Midra's generate_chords().
 // Alternates between block and arpeggiated patterns, random durations, random velocities.
-func GenerateChordsMidra(chords []string, totalBars int) []schema.NoteEvent {
+func GenerateChordsMidra(chords []string, totalBars int, blockRatio float64) []schema.NoteEvent {
 	rng := rand.New(rand.NewSource(42))
 	motifLen := 8
 	motif := make([]int, motifLen)
@@ -369,9 +374,16 @@ func GenerateChordsMidra(chords []string, totalBars int) []schema.NoteEvent {
 		}
 		notes := chordPitchesForChord(chord, baseOctave)
 		base := float64(bar) * 4.0
-		patternType := "block"
-		if m := motif[bar%motifLen]; !(m == 0 || m == 3 || m == 6) {
-			patternType = "arp"
+		patternType := "arp"
+		if rng.Float64() < blockRatio {
+			patternType = "block"
+		}
+		// Fallback to motif-based if blockRatio is zero
+		if blockRatio <= 0 {
+			patternType = "block"
+			if m := motif[bar%motifLen]; !(m == 0 || m == 3 || m == 6) {
+				patternType = "arp"
+			}
 		}
 
 		for _, p := range notes {

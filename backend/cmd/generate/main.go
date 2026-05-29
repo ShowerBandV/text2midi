@@ -167,6 +167,7 @@ func main() {
 	stepProb := 0.65
 	velMin, velMax := 84, 108
 	densityF := 1.0
+	blockRatio := 0.5
 	if profile != nil && len(profile.IntervalBias) > 0 {
 		// Richer interval vocab → higher step probability.
 		stepProb = 0.5 + float64(len(profile.IntervalBias))/20.0
@@ -175,12 +176,13 @@ func main() {
 		}
 		if profile.DensityRange[1] > 0 {
 			densityF = profile.DensityRange[1]
+		blockRatio = profile.BlockVsArpRatio
 		}
 	}
 
 	evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars, densityF)
 	evMap["bass"] = composer.GenerateBassMidra(chordStrs, plan.TotalBars)
-	evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars)
+	evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars, blockRatio)
 	evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax, nil)
 	fmt.Printf("  Generated: drums+bass+pad+lead\n")
 
@@ -198,7 +200,7 @@ func main() {
 		fmt.Printf("  Validate: FAIL (score=%.2f) — regenerating (round %d/3)\n", vr.Score, round+1)
 		evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars, densityF)
 		evMap["bass"] = composer.GenerateBassMidra(chordStrs, plan.TotalBars)
-		evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars)
+		evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars, blockRatio)
 		evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax, nil)
 	}
 
