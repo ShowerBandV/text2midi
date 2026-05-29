@@ -570,28 +570,57 @@ func chordRootMIDI(chord string, octave int) int {
 // GenerateDrumsStyled generates drums with style-specific patterns.
 // Falls back to GenerateDrumsMidra for styles without specific handling.
 func GenerateDrumsStyled(style string, totalBars int, energy float64) []schema.NoteEvent {
+	var events []schema.NoteEvent
 	switch style {
 	case "metal":
-		return drumsMetal(totalBars, energy)
+		events = drumsMetal(totalBars, energy)
 	case "punk":
-		return drumsPunk(totalBars, energy)
+		events = drumsPunk(totalBars, energy)
 	case "emo":
-		return drumsEmo(totalBars, energy)
+		events = drumsEmo(totalBars, energy)
 	case "rock":
-		return drumsRock(totalBars, energy)
+		events = drumsRock(totalBars, energy)
 	case "pop", "rpg", "victory":
-		return drumsPop(totalBars, energy)
+		events = drumsPop(totalBars, energy)
 	case "trap":
-		return drumsTrap(totalBars, energy)
+		events = drumsTrap(totalBars, energy)
 	case "ambient", "casual", "healing":
-		return drumsCasual(totalBars, energy)
+		events = drumsCasual(totalBars, energy)
 	default:
 		density := energy * 0.5
 		if density < 0.15 {
 			density = 0.15
 		}
-		return GenerateDrumsMidra(totalBars, density)
+		events = GenerateDrumsMidra(totalBars, density)
 	}
+	// Apply groove variant: half-time bridge, shuffle verse2.
+	return applyDrumVariant(events, totalBars)
+}
+
+// applyDrumVariant modifies drum events per section for groove variety.
+func applyDrumVariant(events []schema.NoteEvent, totalBars int) []schema.NoteEvent {
+	for i := range events {
+		bar := int(events[i].StartBeat) / 4
+		v := drumVariant(bar, totalBars)
+		if v == "half" {
+			// Half-time: mute every other kick/snare, halve hi-hat density.
+			if events[i].Pitch == 36 || events[i].Pitch == 38 {
+				// Only keep hits on beats 1 and 3 (0.0, 2.0).
+				beatInBar := events[i].StartBeat - float64(bar)*4.0
+				if beatInBar != 0.0 && beatInBar != 2.0 {
+					events[i].Velocity = 1 // effectively mute
+				}
+			}
+			if events[i].Pitch == 42 || events[i].Pitch == 46 {
+				beatInBar := events[i].StartBeat - float64(bar)*4.0
+				// Halve hi-hat: keep only on whole beats.
+				if int(beatInBar*2)%2 != 0 {
+					events[i].Velocity = int(float64(events[i].Velocity) * 0.1)
+				}
+			}
+		}
+	}
+	return events
 }
 
 // drumsMetal: Metal drums. Verse = double-kick + ride. Chorus = blast beats + china + open hat.
@@ -740,15 +769,29 @@ func drumsMetal(totalBars int, energy float64) []schema.NoteEvent {
 	return events
 }
 
-// drumsPunk: Pop-punk drums. Verse = closed hat with accent groove + ghost drags.
-// Chorus = crash-ride edge + open hat bark + tom fills. This is Sum 41 territory.
+// drumVariant returns the groove for a bar: "straight", "half", or "shuffle".
+func drumVariant(bar, totalBars int) string {
+	sec := songSection(bar, totalBars)
+	switch sec {
+	case "bridge":
+		return "half"
+	case "verse":
+		if bar%16 >= 8 && bar%16 < 16 {
+			return "shuffle"
+		}
+	}
+	return "straight"
+}
+
+// drumsPunk: Verse = D-beat, Bridge = half-time, Verse2 = shuffle.
 func drumsPunk(totalBars int, energy float64) []schema.NoteEvent {
 	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 	for bar := 0; bar < totalBars; bar++ {
 		base := float64(bar) * 4.0
-		isChorus := bar >= 8 && bar%8 < 4                       // bars 8-11, 16-19, 24-27
-		isFillBar := bar%8 == 7 || (bar%8 == 3 && bar >= 8)     // bar before chorus change
+		isChorus := bar >= 8 && bar%8 < 4
+		isFillBar := bar%8 == 7 || (bar%8 == 3 && bar >= 8)
+		_ = drumVariant(bar, totalBars)
 
 		kickVel := 110
 		snareVel := 115

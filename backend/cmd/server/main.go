@@ -56,6 +56,7 @@ func main() {
 
 	mux.HandleFunc("GET /api/info", srv.handleInfo)
 	mux.HandleFunc("POST /api/generate", srv.handleGenerate)
+	mux.HandleFunc("GET /api/files", srv.handleFileList)
 	mux.HandleFunc("GET /api/files/{id}", srv.handleDownload)
 
 	// DNA endpoints.
@@ -178,6 +179,15 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleFileList(w http.ResponseWriter, r *http.Request) {
+	records, err := s.fs.ListFiles()
+	if err != nil {
+		writeJSON(w, http.StatusOK, []store.FileRecord{})
+		return
+	}
+	writeJSON(w, http.StatusOK, records)
 }
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {

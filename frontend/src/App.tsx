@@ -109,6 +109,40 @@ export default function App() {
   const [activeTrackId, setActiveTrackId] = useState<string | null>("track-cyberpunk");
   const [notes, setNotes] = useState<MidiNote[]>(INITIAL_TRACKS[0].notes);
 
+  // Load history from backend on mount
+  useEffect(() => {
+    fetch('/api/files')
+      .then(r => r.json())
+      .then((records: any[]) => {
+        if (Array.isArray(records) && records.length > 0) {
+          const historyTracks: MidiTrack[] = records.map((r: any) => ({
+            id: r.id || 'track-' + Math.random(),
+            notes: [],
+            metadata: {
+              title: r.file_name || 'Untitled',
+              seed: Math.floor(Math.random() * 9000000) + 1000000,
+              tempo: 120,
+              key: 'C',
+              scale: 'Major',
+              complexity: 'Medium',
+              genre: 'Generated',
+              durationStr: '00:00'
+            },
+            instrument: 'piano' as InstrumentType,
+            globalVelocity: 80,
+            createdAt: r.created_at || new Date().toISOString(),
+            fileId: r.id
+          }));
+          setTracks(prev => {
+            const existing = new Set(prev.map(t => t.id));
+            const newTracks = historyTracks.filter((t: MidiTrack) => !existing.has(t.id));
+            return [...newTracks, ...prev];
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // AI loading metrics state
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState(0);
