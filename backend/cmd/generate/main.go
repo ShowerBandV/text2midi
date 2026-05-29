@@ -184,6 +184,11 @@ func main() {
 	evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax)
 	fmt.Printf("  Generated: drums+bass+pad+lead\n")
 
+	// --- Self-check against plan ---
+	if vr := planpkg.Validate(evMap, compPlan); !vr.Passed {
+		fmt.Printf("  Validation FAILED (score=%.2f) — regenerate recommended\n", vr.Score)
+	}
+
 	// Generate rhythm guitar power chords for distorted guitar tracks.
 	for _, at := range arr.Tracks {
 		if at.ID == "distorted_guitar" || at.ID == "rhythm_guitar" {
