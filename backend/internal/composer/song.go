@@ -279,7 +279,7 @@ func chordRootMIDI(chord string, octave int) int {
 }
 
 // GenerateDrumsMidra is a Go port of Midra's generate_drums().
-func GenerateDrumsMidra(totalBars int) []schema.NoteEvent {
+func GenerateDrumsMidra(totalBars int, densityFactor float64) []schema.NoteEvent {
 	rng := rand.New(rand.NewSource(42))
 	motifLen := 8
 	hatMotif := make([]int, motifLen)

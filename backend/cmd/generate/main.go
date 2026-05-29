@@ -9,6 +9,7 @@ import (
 	"github.com/ShowerBandV/text2midi/internal/composer"
 	"github.com/ShowerBandV/text2midi/internal/llm"
 	"github.com/ShowerBandV/text2midi/internal/midi"
+	planpkg "github.com/ShowerBandV/text2midi/internal/plan"
 	"github.com/ShowerBandV/text2midi/internal/musicdna"
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
@@ -125,15 +126,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// --- Midra-style 4-generator pipeline ---
-
-
-
-	}
-	_ = templateHarmony
-	chordStrs := []string{"C", "G", "Am", "F"}
-	// --- MusicDNA Template Lookup ---
+	// --- Template Lookup + Style Profile ---
 	templateLib := musicdna.NewTemplateDB("./templates")
+	chordStrs := []string{"C", "G", "Am", "F"}
 	if templates, err := templateLib.FindByStyle(*styleName); err == nil && len(templates) > 0 {
 		for _, t := range templates {
 			if len(t.DNA.Harmony.Progression) > 1 {
@@ -142,25 +137,51 @@ func main() {
 					chordStrs = append(chordStrs, cb.Chord)
 				}
 				if len(chordStrs) > plan.TotalBars { chordStrs = chordStrs[:plan.TotalBars] }
-				fmt.Printf("  Template: %s chords=%v
-", t.Name, chordStrs)
+				fmt.Printf("  Template: %s chords=%v\n", t.Name, chordStrs)
 				break
 			}
 		}
 	}
-	// Build style profile from template library.
-	profile, profErr := musicdna.BuildStyleProfile(templateLib, *styleName)
-	if profErr != nil {
-		profile = &musicdna.StyleProfile{Name: "default"}
+	profile, _ := musicdna.BuildStyleProfile(templateLib, *styleName)
+
+	// --- Composition Plan ---
+	pd := &planpkg.ProfileData{}
+	if profile != nil {
+		if len(profile.IntervalBias) > 0 {
+			pd.IntervalBias = profile.IntervalBias
+			pd.StepProb = 0.5 + float64(len(profile.IntervalBias))/20.0
+		}
+		if profile.VelocityRange[1] > profile.VelocityRange[0] {
+			pd.VelMin, pd.VelMax = profile.VelocityRange[0], profile.VelocityRange[1]
+		}
 	}
+	compPlan := planpkg.Build(plan.Key.Root, plan.Key.Mode, plan.TotalBars, plan.BPM, pd)
+	compPlan.Save("./midi_output/.clef-work")
+
 	_ = profile
 
+	// --- Midra-style 4-generator pipeline ---
 	evMap := make(map[string][]schema.NoteEvent)
 
-	evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars)
+	// Use profile to bias random choices (fallback to defaults if no profile).
+	stepProb := 0.65
+	velMin, velMax := 84, 108
+	densityF := 1.0
+	if profile != nil && len(profile.IntervalBias) > 0 {
+		// Richer interval vocab → higher step probability.
+		stepProb = 0.5 + float64(len(profile.IntervalBias))/20.0
+		if profile.VelocityRange[1] > profile.VelocityRange[0] {
+			velMin, velMax = profile.VelocityRange[0], profile.VelocityRange[1]
+		}
+		if profile.DensityRange[1] > 0 {
+			densityF = profile.DensityRange[1]
+		}
+	}
+
+	evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars, densityF)
 	evMap["bass"] = composer.GenerateBassMidra(chordStrs, plan.TotalBars)
 	evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars)
-	evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars)
+	evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax)
 	fmt.Printf("  Generated: drums+bass+pad+lead\n")
 
 	// Generate rhythm guitar power chords for distorted guitar tracks.

@@ -136,7 +136,7 @@ func BuildPhrase(motif []int, plan MotifPlan, rng *rand.Rand) Phrase {
 
 // GenerateLeadMidra is a Go port of Midra's generate_lead().
 // Generates a random scale-degree motif with stepwise bias, anchors, and random velocities.
-func GenerateLeadMidra(keyRoot, keyMode string, totalBars int) []schema.NoteEvent {
+func GenerateLeadMidra(keyRoot, keyMode string, totalBars int, stepProb float64, velMin, velMax int) []schema.NoteEvent {
 	scale := getScaleDegrees(keyRoot, keyMode)
 	if len(scale) == 0 {
 		scale = []int{0, 2, 3, 5, 7, 8, 10} // fallback: C minor
@@ -156,7 +156,7 @@ func GenerateLeadMidra(keyRoot, keyMode string, totalBars int) []schema.NoteEven
 
 	// Stepwise bias: 65% chance to move by ±1 or ±2 instead of random jump.
 	for i := 1; i < motifLen-1; i++ {
-		if rng.Float64() < 0.65 {
+		if rng.Float64() < stepProb {
 			step := []int{-2, -1, 1, 2}[rng.Intn(4)]
 			motif[i] = motif[i-1] + step
 			if motif[i] < 0 {
@@ -179,7 +179,7 @@ func GenerateLeadMidra(keyRoot, keyMode string, totalBars int) []schema.NoteEven
 				scaleIdx += len(scale)
 			}
 			pitch := scale[scaleIdx] + 12*(octave-1) // Midra uses "5" octave = MIDI octave 5
-			velocity := 84 + rng.Intn(25) // 84-108
+			velocity := velMin + rng.Intn(velMax-velMin) // 84-108
 			duration := []float64{0.25, 0.4, 0.5, 0.75}[rng.Intn(4)]
 			events = append(events, schema.NoteEvent{
 				Type: "note", Pitch: pitch,
