@@ -136,7 +136,7 @@ func BuildPhrase(motif []int, plan MotifPlan, rng *rand.Rand) Phrase {
 
 // GenerateLeadMidra is a Go port of Midra's generate_lead().
 // Generates a random scale-degree motif with stepwise bias, anchors, and random velocities.
-func GenerateLeadMidra(keyRoot, keyMode string, totalBars int, stepProb float64, velMin, velMax int) []schema.NoteEvent {
+func GenerateLeadMidra(keyRoot, keyMode string, totalBars int, stepProb float64, velMin, velMax int, sections interface{}) []schema.NoteEvent {
 	scale := getScaleDegrees(keyRoot, keyMode)
 	if len(scale) == 0 {
 		scale = []int{0, 2, 3, 5, 7, 8, 10} // fallback: C minor

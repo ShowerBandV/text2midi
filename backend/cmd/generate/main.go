@@ -181,12 +181,25 @@ func main() {
 	evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars, densityF)
 	evMap["bass"] = composer.GenerateBassMidra(chordStrs, plan.TotalBars)
 	evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars)
-	evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax)
+	evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax, nil)
 	fmt.Printf("  Generated: drums+bass+pad+lead\n")
 
-	// --- Self-check against plan ---
-	if vr := planpkg.Validate(evMap, compPlan); !vr.Passed {
-		fmt.Printf("  Validation FAILED (score=%.2f) — regenerate recommended\n", vr.Score)
+	// --- Self-check + regeneration loop (max 3 rounds) ---
+	for round := 0; round < 3; round++ {
+		vr := planpkg.Validate(evMap, compPlan)
+		if vr.Passed {
+			fmt.Printf("  Validate: PASS (score=%.2f, round=%d)\n", vr.Score, round+1)
+			break
+		}
+		if round == 2 {
+			fmt.Printf("  Validate: FAIL after 3 rounds (score=%.2f) — outputting best result\n", vr.Score)
+			break
+		}
+		fmt.Printf("  Validate: FAIL (score=%.2f) — regenerating (round %d/3)\n", vr.Score, round+1)
+		evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars, densityF)
+		evMap["bass"] = composer.GenerateBassMidra(chordStrs, plan.TotalBars)
+		evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars)
+		evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax, nil)
 	}
 
 	// Generate rhythm guitar power chords for distorted guitar tracks.
