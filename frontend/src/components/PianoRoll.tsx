@@ -427,7 +427,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
           </div>
 
           {/* Playhead & Grid scroll container */}
-          <div ref={pianoCanvasRef} onScroll={handleGridScroll} className="flex-grow overflow-auto relative min-h-0 piano-grid" style={{'--col-w': `${COLUMN_WIDTH}px`, '--row-h': `${ROW_HEIGHT}px`}} id="piano-roll-canvas">
+          <div ref={pianoCanvasRef} onScroll={handleGridScroll} className="flex-grow overflow-auto relative min-h-0" id="piano-roll-canvas">
             
             {/* Playhead Line Indicator Component */}
             <div
@@ -435,7 +435,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
             />
 
             {/* Note events coordinate render layer */}
-            <div className="relative" style={{ height: `${PIANO_ROWS.length * ROW_HEIGHT}px`, width: `${GRID_COLUMNS * COLUMN_WIDTH}px` }}>
+            <div className="relative piano-grid" style={{ '--col-w': `${COLUMN_WIDTH}px`, '--row-h': `${ROW_HEIGHT}px`, height: `${PIANO_ROWS.length * ROW_HEIGHT}px`, width: `${GRID_COLUMNS * COLUMN_WIDTH}px` }}>
               
               {/* Grid cell matrix trigger elements */}
               {PIANO_ROWS.map((pitch, rowIdx) => {
@@ -451,7 +451,8 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
                         top: `${topVal}px`,
                         left: `${leftVal}px`,
                         width: `${COLUMN_WIDTH}px`,
-                        height: `${ROW_HEIGHT}px`
+                        height: `${ROW_HEIGHT}px`,
+                        contentVisibility: "auto"
                       }}
                     />
                   );
