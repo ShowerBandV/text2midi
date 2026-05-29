@@ -597,7 +597,7 @@ func GenerateDrumsStyled(style string, totalBars int, energy float64) []schema.N
 	return applyGrooveVariant(events, totalBars)
 }
 
-// applyGrooveVariant modifies drum events per section for groove variety.
+// applyGrooveVariant modifies events per section: half-time thins out all instruments.
 func applyGrooveVariant(events []schema.NoteEvent, totalBars int) []schema.NoteEvent {
 	for i := range events {
 		bar := int(events[i].StartBeat) / 4
