@@ -136,7 +136,7 @@ func BuildPhrase(motif []int, plan MotifPlan, rng *rand.Rand) Phrase {
 
 // GenerateLeadMidra is a Go port of Midra's generate_lead().
 // Generates a random scale-degree motif with stepwise bias, anchors, and random velocities.
-func GenerateLeadMidra(keyRoot, keyMode string, totalBars int, stepProb float64, velMin, velMax int, sections interface{}) []schema.NoteEvent {
+func GenerateLeadMidra(keyRoot, keyMode string, totalBars int, stepProb float64, velMin, velMax int, secDensity []float64) []schema.NoteEvent {
 	scale := getScaleDegrees(keyRoot, keyMode)
 	if len(scale) == 0 {
 		scale = []int{0, 2, 3, 5, 7, 8, 10} // fallback: C minor
@@ -168,18 +168,30 @@ func GenerateLeadMidra(keyRoot, keyMode string, totalBars int, stepProb float64,
 		}
 	}
 
-	// Generate events.
+	// Generate events with per-section density and register.
 	var events []schema.NoteEvent
-	octave := 5 // C5 range
 	for bar := 0; bar < totalBars; bar++ {
 		base := float64(bar) * 4.0
-		for i, step := range motif {
+		density := 0.5 // default
+		if bar < len(secDensity) && secDensity[bar] > 0 {
+			density = secDensity[bar]
+		}
+		// Low density: only play first few notes of motif.
+		// High density: full motif.
+		noteCount := int(float64(motifLen) * density)
+		if noteCount < 2 { noteCount = 2 }
+		if noteCount > motifLen { noteCount = motifLen }
+		// Register: higher density → higher octave
+		octave := 5
+		if density > 0.7 { octave = 6 }
+		if density < 0.3 { octave = 4 }
+
+		for i := 0; i < noteCount; i++ {
+			step := motif[i]
 			scaleIdx := step % len(scale)
-			if scaleIdx < 0 {
-				scaleIdx += len(scale)
-			}
-			pitch := scale[scaleIdx] + 12*(octave-1) // Midra uses "5" octave = MIDI octave 5
-			velocity := velMin + rng.Intn(velMax-velMin) // 84-108
+			if scaleIdx < 0 { scaleIdx += len(scale) }
+			pitch := scale[scaleIdx] + 12*(octave-1)
+			velocity := velMin + rng.Intn(velMax-velMin)
 			duration := []float64{0.25, 0.4, 0.5, 0.75}[rng.Intn(4)]
 			events = append(events, schema.NoteEvent{
 				Type: "note", Pitch: pitch,

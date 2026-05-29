@@ -180,10 +180,19 @@ func main() {
 		}
 	}
 
+	secDensity := make([]float64, plan.TotalBars)
+	cursor := 0
+	for _, sec := range compPlan.Sections {
+		for b := 0; b < sec.Bars && cursor < plan.TotalBars; b++ {
+			secDensity[cursor] = sec.Density
+			cursor++
+		}
+	}
+
 	evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars, densityF)
 	evMap["bass"] = composer.GenerateBassMidra(chordStrs, plan.TotalBars)
 	evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars, blockRatio)
-	evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax, nil)
+	evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax, secDensity)
 	fmt.Printf("  Generated: drums+bass+pad+lead\n")
 
 	// --- Self-check + regeneration loop (max 3 rounds) ---
@@ -201,7 +210,7 @@ func main() {
 		evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars, densityF)
 		evMap["bass"] = composer.GenerateBassMidra(chordStrs, plan.TotalBars)
 		evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars, blockRatio)
-		evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax, nil)
+		evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax, secDensity)
 	}
 
 	// Generate rhythm guitar power chords for distorted guitar tracks.
