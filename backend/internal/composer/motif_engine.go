@@ -152,7 +152,7 @@ func GenerateLeadMidra(keyRoot, keyMode string, totalBars int, stepProb float64,
 		scaleSize = 5
 	}
 
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	motifLen := 8
 	motif := make([]int, motifLen)
 
@@ -285,7 +285,7 @@ func addPentatonicOrnaments(events []schema.NoteEvent, totalBars int) []schema.N
 	if len(events) < 4 {
 		return events
 	}
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var result []schema.NoteEvent
 	for _, ev := range events {
 		// ~25% of notes get a grace note ornament.
@@ -460,7 +460,7 @@ func GenerateLeadMetal(keyRoot string, totalBars int, energy float64) []schema.N
 // GeneratePianoLegend creates a John Legend-style piano part: left hand bass + right hand chords + melody.
 // Section-aware: sparse intro → building verse → full chorus → featured bridge → sparse outro.
 func GeneratePianoLegend(keyRoot, keyMode string, totalBars int, chords []string) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 
 	for bar := 0; bar < totalBars; bar++ {
@@ -652,7 +652,7 @@ func chordRootMIDIPiano(chord string, octave int) int {
 // GenerateLeadRock creates a blues-scale rock lead: double-stops, repeating licks, sparse.
 func GenerateLeadRock(keyRoot string, totalBars int, energy float64) []schema.NoteEvent {
 	scale := getBluesScale(keyRoot)
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 
 	for bar := 0; bar < totalBars; bar++ {

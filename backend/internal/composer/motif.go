@@ -288,7 +288,7 @@ func GenerateStringsLayered(leadNotes []schema.NoteEvent, totalBars int) []schem
 	if len(leadNotes) < 4 {
 		return nil
 	}
-	rng := rand.New(rand.NewSource(44))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 
 	// Group lead notes by section.
@@ -352,7 +352,7 @@ func GenerateTwinHarmony(leadNotes []schema.NoteEvent, totalBars int) []schema.N
 	if len(leadNotes) < 4 {
 		return nil
 	}
-	rng := rand.New(rand.NewSource(45))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var harmony []schema.NoteEvent
 	for i, n := range leadNotes {
 		bar := int(n.StartBeat) / 4
@@ -415,7 +415,7 @@ func GenerateCounterMelody(leadNotes []schema.NoteEvent, totalBars int) []schema
 		return nil
 	}
 
-	rng := rand.New(rand.NewSource(43))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var counter []schema.NoteEvent
 	noteCount := 0
 

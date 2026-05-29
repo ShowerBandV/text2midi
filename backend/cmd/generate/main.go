@@ -22,7 +22,6 @@ func main() {
 	prompt := flag.String("prompt", "", "Music description")
 	styleName := flag.String("style", "trap", "Style")
 	bpm := flag.Int("bpm", 140, "BPM")
-	flag.Int64("seed", 0, "Random seed (0=random)")
 	key := flag.String("key", "C minor", "Key")
 	bars := flag.Int("bars", 8, "Bars")
 	out := flag.String("out", "./midi_output", "Output dir")
@@ -33,6 +32,7 @@ func main() {
 	pentatonic := flag.Bool("pentatonic", false, "Use pentatonic scale + Chinese ornamentation for lead melody")
 	flatVel := flag.Int("flat-vel", 100, "Force all note velocities to this value (0=disabled)")
 	validate := flag.Bool("validate", false, "Run music21-style validation + auto-fix measure durations")
+	seed := flag.Int64("seed", 0, "Random seed (0=random per run, otherwise deterministic)")
 	flag.Parse()
 
 	if *prompt == "" && !*local {
@@ -45,9 +45,11 @@ func main() {
 
 	// Local mode: skip LLM, use rule-based generation directly.
 	if *local {
+		composer.SetGlobalSeed(*seed)
 		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate)
 		return
 	}
+	composer.SetGlobalSeed(*seed)
 
 	if os.Getenv("OPENAI_API_KEY") == "" {
 		fmt.Fprintln(os.Stderr, "OPENAI_API_KEY required (or use --local for offline mode)")

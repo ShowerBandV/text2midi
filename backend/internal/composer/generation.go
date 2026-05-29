@@ -128,7 +128,7 @@ func (ctx *GenerationContext) MotifUseRate() float64 {
 
 // NewRNG creates a new seeded random number generator.
 func NewRNG() *rand.Rand {
-	return rand.New(rand.NewSource(42))
+	return rand.New(rand.NewSource(globalSeed))
 }
 
 // DefaultDNA returns a neutral ComposerDNA archetype.

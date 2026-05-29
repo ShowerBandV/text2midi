@@ -4,9 +4,22 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
+
+var globalSeed = time.Now().UnixNano()
+
+// SetGlobalSeed sets the seed used by all generators. Call before generation.
+func SetGlobalSeed(s int64) {
+	if s == 0 {
+		s = time.Now().UnixNano()
+	}
+	globalSeed = s
+	rand.Seed(s)
+}
+
 
 type SectionBlock struct {
 	Name      string
@@ -225,7 +238,7 @@ func GenerateBassStyled(style string, chords []string, totalBars int) []schema.N
 
 // bassMetal: tight 8th-note root chugs, synced with double-kick.
 func bassMetal(chords []string, totalBars int) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 	for bar := 0; bar < totalBars; bar++ {
 		chord := chords[bar%len(chords)]
@@ -273,7 +286,7 @@ func bassMetal(chords []string, totalBars int) []schema.NoteEvent {
 
 // bassPunk: straight 8th-note root notes, simple and relentless. No fills, no slides.
 func bassPunk(chords []string, totalBars int) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 	for bar := 0; bar < totalBars; bar++ {
 		chord := chords[bar%len(chords)]
@@ -300,7 +313,7 @@ func bassPunk(chords []string, totalBars int) []schema.NoteEvent {
 // bassPop: melodic, syncopated, locked with kick. MJ pocket.
 // Verse = sparse groove, Chorus = busier melodic fills.
 func bassPop(chords []string, totalBars int) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 	for bar := 0; bar < totalBars; bar++ {
 		chord := chords[bar%len(chords)]
@@ -404,7 +417,7 @@ func bassTrap(chords []string, totalBars int) []schema.NoteEvent {
 
 // bassEmo: sparse, long sustained root notes, melancholic.
 func bassEmo(chords []string, totalBars int) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 	for bar := 0; bar < totalBars; bar++ {
 		chord := chords[bar%len(chords)]
@@ -434,7 +447,7 @@ func bassEmo(chords []string, totalBars int) []schema.NoteEvent {
 // GenerateBassMidra is a Go port of Midra's generate_bass().
 // Follows chord roots with octave shifts, random durations and velocities.
 func GenerateBassMidra(chords []string, totalBars int) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	motifLen := 8
 	motif := make([]int, motifLen)
 	for i := range motif {
@@ -480,7 +493,7 @@ func GenerateBassMidra(chords []string, totalBars int) []schema.NoteEvent {
 
 // bassTransitionFill adds a short bass fill before the chorus (bars 6-7).
 func bassTransitionFill(totalBars int, chords []string) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 	// Fill at bar 7 (last bar before chorus), or bar totalBars-2.
 	fillBar := totalBars - 9
@@ -706,7 +719,7 @@ func drumsMetal(totalBars int, energy float64) []schema.NoteEvent {
 // drumsPunk: Pop-punk drums. Verse = closed hat with accent groove + ghost drags.
 // Chorus = crash-ride edge + open hat bark + tom fills. This is Sum 41 territory.
 func drumsPunk(totalBars int, energy float64) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 	for bar := 0; bar < totalBars; bar++ {
 		base := float64(bar) * 4.0
@@ -864,7 +877,7 @@ func drumsPunk(totalBars int, energy float64) []schema.NoteEvent {
 
 // humanizeDrums adds ghost notes, fills, and subtle variations to make drums feel human.
 func humanizeDrums(events []schema.NoteEvent, totalBars int) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	result := make([]schema.NoteEvent, len(events))
 	copy(result, events)
 
@@ -978,7 +991,7 @@ func humanizeDrums(events []schema.NoteEvent, totalBars int) []schema.NoteEvent 
 
 // drumsEmo: sparse, rim-click, occasional floor tom, minimal.
 func drumsEmo(totalBars int, energy float64) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 	for bar := 0; bar < totalBars; bar++ {
 		base := float64(bar) * 4.0
@@ -1222,7 +1235,7 @@ func drumsPop(totalBars int, energy float64) []schema.NoteEvent {
 // drumsRock: Rock drums. Verse = backbeat + ride. Chorus = open hat + power fills.
 // Off-beat kick pushes on the "and" for driving momentum.
 func drumsRock(totalBars int, energy float64) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 	for bar := 0; bar < totalBars; bar++ {
 		base := float64(bar) * 4.0
@@ -1379,7 +1392,7 @@ func drumsRock(totalBars int, energy float64) []schema.NoteEvent {
 
 // GenerateDrumsMidra is a Go port of Midra's generate_drums().
 func GenerateDrumsMidra(totalBars int, densityFactor float64) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	motifLen := 8
 	hatMotif := make([]int, motifLen)
 	// densityFactor controls hi-hat activity (0=sparse, 1=dense)
@@ -1684,7 +1697,7 @@ func chordsAmbient(chords []string, totalBars int) []schema.NoteEvent {
 // GenerateChordsMidra is a Go port of Midra's generate_chords().
 // Alternates between block and arpeggiated patterns, random durations, random velocities.
 func GenerateChordsMidra(chords []string, totalBars int, blockRatio float64) []schema.NoteEvent {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(globalSeed))
 	motifLen := 8
 	motif := make([]int, motifLen)
 	for i := range motif {
