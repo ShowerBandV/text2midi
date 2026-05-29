@@ -8,9 +8,8 @@ import (
 	"github.com/ShowerBandV/text2midi/internal/agent"
 	"github.com/ShowerBandV/text2midi/internal/composer"
 	"github.com/ShowerBandV/text2midi/internal/llm"
-	"github.com/ShowerBandV/text2midi/internal/midi"
-	planpkg "github.com/ShowerBandV/text2midi/internal/plan"
 	"github.com/ShowerBandV/text2midi/internal/musicdna"
+	"github.com/ShowerBandV/text2midi/internal/midi"
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
@@ -126,92 +125,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	// --- Template Lookup + Style Profile ---
-	templateLib := musicdna.NewTemplateDB("./templates")
-	chordStrs := []string{"C", "G", "Am", "F"}
-	if templates, err := templateLib.FindByStyle(*styleName); err == nil && len(templates) > 0 {
-		for _, t := range templates {
-			if len(t.DNA.Harmony.Progression) > 1 {
-				chordStrs = nil
-				for _, cb := range t.DNA.Harmony.Progression {
-					chordStrs = append(chordStrs, cb.Chord)
-				}
-				if len(chordStrs) > plan.TotalBars { chordStrs = chordStrs[:plan.TotalBars] }
-				fmt.Printf("  Template: %s chords=%v\n", t.Name, chordStrs)
-				break
-			}
-		}
-	}
-	profile, _ := musicdna.BuildStyleProfile(templateLib, *styleName)
-
-	// --- Composition Plan ---
-	pd := &planpkg.ProfileData{}
-	if profile != nil {
-		if len(profile.IntervalBias) > 0 {
-			pd.IntervalBias = profile.IntervalBias
-			pd.StepProb = 0.5 + float64(len(profile.IntervalBias))/20.0
-		}
-		if profile.VelocityRange[1] > profile.VelocityRange[0] {
-			pd.VelMin, pd.VelMax = profile.VelocityRange[0], profile.VelocityRange[1]
-		}
-	}
-	compPlan := planpkg.Build(plan.Key.Root, plan.Key.Mode, plan.TotalBars, plan.BPM, pd)
-	compPlan.Save("./midi_output/.clef-work")
-
-	_ = profile
-
-	// --- Midra-style 4-generator pipeline ---
+	// --- LLM Agent pipeline (Clef-style) ---
 	evMap := make(map[string][]schema.NoteEvent)
 
-	// Use profile to bias random choices (fallback to defaults if no profile).
-	stepProb := 0.65
-	velMin, velMax := 84, 108
-	densityF := 1.0
-	blockRatio := 0.5
-	if profile != nil && len(profile.IntervalBias) > 0 {
-		// Richer interval vocab → higher step probability.
-		stepProb = 0.5 + float64(len(profile.IntervalBias))/20.0
-		if profile.VelocityRange[1] > profile.VelocityRange[0] {
-			velMin, velMax = profile.VelocityRange[0], profile.VelocityRange[1]
-		}
-		if profile.DensityRange[1] > 0 {
-			densityF = profile.DensityRange[1]
-		blockRatio = profile.BlockVsArpRatio
-		}
-	}
+	// --- LLM Agents (Clef-style: LLM writes notes per track) ---
+	cpJSON := agent.ChordProgressionToJSON(plan.ChordProgression)
+	totalBeats := plan.TotalBars * 4
 
-	secDensity := make([]float64, plan.TotalBars)
-	cursor := 0
-	for _, sec := range compPlan.Sections {
-		for b := 0; b < sec.Bars && cursor < plan.TotalBars; b++ {
-			secDensity[cursor] = sec.Density
-			cursor++
-		}
+	if ln, err := agent.ComposerAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
+		evMap["lead"] = ln
+		fmt.Printf("  [Composer] lead: %d notes\n", len(ln))
 	}
-
-	evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars, densityF)
-	evMap["bass"] = composer.GenerateBassMidra(chordStrs, plan.TotalBars)
-	evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars, blockRatio)
-	evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax, secDensity)
-	fmt.Printf("  Generated: drums+bass+pad+lead\n")
-
-	// --- Self-check + regeneration loop (max 3 rounds) ---
-	for round := 0; round < 3; round++ {
-		vr := planpkg.Validate(evMap, compPlan)
-		if vr.Passed {
-			fmt.Printf("  Validate: PASS (score=%.2f, round=%d)\n", vr.Score, round+1)
-			break
-		}
-		if round == 2 {
-			fmt.Printf("  Validate: FAIL after 3 rounds (score=%.2f) — outputting best result\n", vr.Score)
-			break
-		}
-		fmt.Printf("  Validate: FAIL (score=%.2f) — regenerating (round %d/3)\n", vr.Score, round+1)
-		evMap["drums"] = composer.GenerateDrumsMidra(plan.TotalBars, densityF)
-		evMap["bass"] = composer.GenerateBassMidra(chordStrs, plan.TotalBars)
-		evMap["pad"] = composer.GenerateChordsMidra(chordStrs, plan.TotalBars, blockRatio)
-		evMap["lead"] = composer.GenerateLeadMidra(plan.Key.Root, plan.Key.Mode, plan.TotalBars, stepProb, velMin, velMax, secDensity)
+	if bn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "bass"); err == nil {
+		evMap["bass"] = bn
+		fmt.Printf("  [Rhythmist] bass: %d notes\n", len(bn))
 	}
+	if pn, err := agent.HarmonistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
+		evMap["pad"] = pn
+		fmt.Printf("  [Harmonist] pad: %d notes\n", len(pn))
+	}
+	if dn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "drums"); err == nil {
+		evMap["drums"] = dn
+		fmt.Printf("  [Rhythmist] drums: %d notes\n", len(dn))
+	}
+	fmt.Printf("  Generated: drums+bass+pad+lead (LLM agents)\n")
+
 
 	// Generate rhythm guitar power chords for distorted guitar tracks.
 	for _, at := range arr.Tracks {
