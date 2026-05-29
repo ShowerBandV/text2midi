@@ -150,6 +150,48 @@ func main() {
 	}
 	fmt.Printf("  Generated: drums+bass+pad+lead (LLM agents)\n")
 
+	// --- Orchestrator: add dynamics ---
+	agent.OrchestratorAgent(evMap, plan.TotalBars)
+
+	// --- Reviewer + Leader iteration loop ---
+	for round := 0; round < 3; round++ {
+		report := agent.ReviewerAgent(client, evMap, plan.TotalBars)
+		fmt.Printf("  [Reviewer] round %d: total=%.1f melody=%.1f harm=%.1f rhythm=%.1f\n",
+			round+1, report.Total, report.Melody, report.Harmony, report.Rhythm)
+
+		leaderPlan := agent.LeaderAgent(report, round+1)
+		if leaderPlan.IterationComplete {
+			fmt.Printf("  [Leader] iteration complete (round %d)\n", round+1)
+			break
+		}
+
+		// Execute tasks.
+		for _, task := range leaderPlan.Tasks {
+			fmt.Printf("  [Leader] executing: %s — %s\n", task.Agent, task.Instruction)
+			switch task.Agent {
+			case "composer":
+				if ln, err := agent.ComposerAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
+					evMap["lead"] = ln
+				}
+			case "harmonist":
+				if pn, err := agent.HarmonistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON); err == nil {
+					evMap["pad"] = pn
+				}
+			case "rhythmist":
+				if bn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "bass"); err == nil {
+					evMap["bass"] = bn
+				}
+				if dn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "drums"); err == nil {
+					evMap["drums"] = dn
+				}
+			}
+		}
+		if round == 2 {
+			fmt.Printf("  [Leader] max rounds reached — outputting current result\n")
+			break
+		}
+	}
+
 
 	// Generate rhythm guitar power chords for distorted guitar tracks.
 	for _, at := range arr.Tracks {
