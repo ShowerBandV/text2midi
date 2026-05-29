@@ -231,7 +231,7 @@ func GenerateBassStyled(style string, chords []string, totalBars int) []schema.N
 		return bassPop(chords, totalBars)
 	case "trap":
 		return bassTrap(chords, totalBars)
-	case "ambient", "casual":
+	case "ambient", "casual", "healing":
 		return bassCasual(chords, totalBars)
 	default:
 		return GenerateBassMidra(chords, totalBars)
@@ -583,7 +583,7 @@ func GenerateDrumsStyled(style string, totalBars int, energy float64) []schema.N
 		return drumsPop(totalBars, energy)
 	case "trap":
 		return drumsTrap(totalBars, energy)
-	case "ambient", "casual":
+	case "ambient", "casual", "healing":
 		return drumsCasual(totalBars, energy)
 	default:
 		density := energy * 0.5
@@ -1523,7 +1523,7 @@ func GenerateChordsStyled(style string, chords []string, totalBars int, blockRat
 		return chordsPower(chords, totalBars, "punk")
 	case "rock":
 		return chordsPower(chords, totalBars, "rock")
-	case "ambient", "casual":
+	case "ambient", "casual", "healing":
 		return chordsCasual(chords, totalBars)
 	case "pop", "rpg":
 		return chordsPop(chords, totalBars)

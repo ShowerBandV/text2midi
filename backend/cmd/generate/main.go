@@ -33,6 +33,7 @@ func main() {
 	flatVel := flag.Int("flat-vel", 100, "Force all note velocities to this value (0=disabled)")
 	validate := flag.Bool("validate", false, "Run music21-style validation + auto-fix measure durations")
 	seed := flag.Int64("seed", 0, "Random seed (0=random per run, otherwise deterministic)")
+	loopable := flag.Bool("loopable", false, "Make outro connect seamlessly to intro for game loop")
 	flag.Parse()
 
 	if *prompt == "" && !*local {
@@ -46,7 +47,7 @@ func main() {
 	// Local mode: skip LLM, use rule-based generation directly.
 	if *local {
 		composer.SetGlobalSeed(*seed)
-		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate)
+		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate, *loopable)
 		return
 	}
 	composer.SetGlobalSeed(*seed)
@@ -650,7 +651,7 @@ func toFloat(v any) float64 {
 
 // runLocal generates MIDI entirely via Go rule-based engines, no LLM.
 // Designed for offline use or quick iteration.
-func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int, runValidate bool) {
+func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int, runValidate bool, loopable bool) {
 	fmt.Println("[Local mode] Generating without LLM...")
 
 	// ── Parse key ────────────────────────────────────────────────
@@ -783,7 +784,7 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 			l = composer.GenerateLeadRock(keyRoot, bars, energy)
 		case chordStyle == "punk":
 			l = composer.GenerateLeadPunk(keyRoot, bars, energy)
-		case chordStyle == "pop" || chordStyle == "rpg":
+		case chordStyle == "pop" || chordStyle == "rpg" || chordStyle == "healing":
 			l = composer.GeneratePianoLegend(keyRoot, keyMode, bars, chords)
 		default:
 			l = composer.GenerateLeadMidra(keyRoot, keyMode, bars, stepProb, velMin, velMax, secDensity, secRegister, pentatonic)
@@ -845,7 +846,7 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 	// Counter-melody / texture layer (strings, etc.).
 	if layout.counter && ch < 9 {
 		var counter []schema.NoteEvent
-		if chordStyle == "pop" || chordStyle == "rpg" {
+		if chordStyle == "pop" || chordStyle == "rpg" || chordStyle == "healing" {
 			counter = composer.GenerateStringsLayered(evMap["lead"], bars)
 		} else if chordStyle == "metal" {
 			counter = composer.GenerateTwinHarmony(evMap["lead"], bars)
@@ -864,6 +865,11 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 	// ── Apply section dynamics ───────────────────────────────────
 	structure := composer.SelectStructure(energy, "rpg")
 	composer.ApplyStructure(evMap, structure, bars)
+
+	// ── Loopable: mirror first bar into last bar ────────────────
+	if loopable {
+		makeLoopable(evMap, bars)
+	}
 
 	// ── Flat velocity (MUST be last, after all post-processing) ──
 	if flatVel > 0 {
@@ -926,6 +932,8 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 func styleProfile(style string) (darkness, energy, rhythmic, tension float64, defBPM, defBars int, chordStyle string) {
 	s := strings.ToLower(style)
 	switch {
+	case strings.Contains(s, "healing") || strings.Contains(s, "cozy") || strings.Contains(s, "chill"):
+		return 0.05, 0.10, 0.05, 0.05, 60, 48, "healing" // ~3:12 at 60bpm
 	case strings.Contains(s, "emo") || strings.Contains(s, "sad") || strings.Contains(s, "melancholy"):
 		return 0.75, 0.32, 0.22, 0.52, 72, 24, "emo"
 	case strings.Contains(s, "trap") || strings.Contains(s, "hip"):
@@ -953,7 +961,7 @@ func progForStyle(root, mode string, totalBars int, chordStyle string) []string 
 			// i - iv - VII - III (emo descending, melancholic)
 			base := []string{root + "m", intervalChord(root, 5), intervalChord(root, 10), intervalChord(root, 3)}
 			return repeatChords(base, totalBars)
-		case "ambient":
+		case "ambient", "healing":
 			// i - VII - i - VI (static, floating)
 			base := []string{root + "m", intervalChord(root, 10), root + "m", intervalChord(root, 8)}
 			return repeatChords(base, totalBars)
@@ -981,7 +989,7 @@ func progForStyle(root, mode string, totalBars int, chordStyle string) []string 
 		// I - IV - V - IV
 		base := []string{root, fourthOf(root), fifthOf(root), fourthOf(root)}
 		return repeatChords(base, totalBars)
-	case "ambient":
+	case "ambient", "healing":
 		// I - IV - I - vi (peaceful float)
 		base := []string{root, fourthOf(root), root, relativeMinor(root)}
 		return repeatChords(base, totalBars)
@@ -1242,6 +1250,36 @@ func applyOrchestrationCurve(evMap map[string][]schema.NoteEvent, totalBars int,
 }
 
 // flattenVelocities sets all note velocities to a fixed value.
+// makeLoopable copies the first bar's events to the last bar, shifting their timing,
+// so the outro seamlessly connects back to the intro for game looping.
+func makeLoopable(evMap map[string][]schema.NoteEvent, totalBars int) {
+	firstBarEnd := 4.0
+	lastBarStart := float64(totalBars-1) * 4.0
+	for key, evs := range evMap {
+		var firstBarEvents []schema.NoteEvent
+		for _, ev := range evs {
+			if ev.StartBeat < firstBarEnd {
+				firstBarEvents = append(firstBarEvents, ev)
+			}
+		}
+		// Remove existing last-bar events.
+		var filtered []schema.NoteEvent
+		for _, ev := range evs {
+			if ev.StartBeat < lastBarStart {
+				filtered = append(filtered, ev)
+			}
+		}
+		// Clone first-bar events to last bar.
+		for _, ev := range firstBarEvents {
+			clone := ev
+			clone.StartBeat = lastBarStart + (ev.StartBeat - 0)
+			filtered = append(filtered, clone)
+		}
+		evMap[key] = filtered
+	}
+	fmt.Println("  [Loopable] last bar mirrors first bar for seamless loop")
+}
+
 func flattenVelocities(evMap map[string][]schema.NoteEvent, vel int) {
 	for _, evs := range evMap {
 		for i := range evs {
@@ -1336,13 +1374,14 @@ func trackLayout(style string) trackLayoutConfig {
 			rhythmName: "Pad", rhythmProg: 90, rhythmVol: 85, // New Age Pad
 			leadName: "Synth Lead", leadProg: 81, // Lead (square)
 		}
-	case "ambient":
-		// Ambient: sparse drums + bass + evolving pad + pad lead. No strings.
+	case "ambient", "healing":
+		// Healing: no drums. Piano + warm pad + strings. Peaceful, for cozy games.
 		return trackLayoutConfig{
-			drums: true, bass: true, rhythm: true, lead: true, counter: false,
-			bassProg: 33,
-			rhythmName: "Pad", rhythmProg: 95, rhythmVol: 75, // Sweep Pad
-			leadName: "Lead Pad", leadProg: 92, // Warm Pad
+			drums: false, bass: true, rhythm: true, lead: true, counter: true,
+			bassProg: 34, // Electric Bass (finger)
+			rhythmName: "Warm Pad", rhythmProg: 91, rhythmVol: 50, // Pad (warm)
+			leadName: "Piano", leadProg: 1, // Acoustic Grand
+			counterName: "Strings", counterProg: 49, // String Ensemble 2
 		}
 	case "emo":
 		// Emo: drums + bass + dark pad + piano lead + strings counter.
