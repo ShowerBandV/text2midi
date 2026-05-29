@@ -35,6 +35,7 @@ func main() {
 	seed := flag.Int64("seed", 0, "Random seed (0=random per run, otherwise deterministic)")
 	loopable := flag.Bool("loopable", false, "Make outro connect seamlessly to intro for game loop")
 	progression := flag.String("progression", "", "Chord progression: warm/dark/hopeful/epic/tense/bright (overrides style default)")
+	mode := flag.String("mode", "", "Scale mode: dorian/phrygian/lydian/mixolydian (overrides style default)")
 	flag.Parse()
 
 	if *prompt == "" && !*local {
@@ -48,7 +49,7 @@ func main() {
 	// Local mode: skip LLM, use rule-based generation directly.
 	if *local {
 		composer.SetGlobalSeed(*seed)
-		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate, *loopable, *progression)
+		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate, *loopable, *progression, *mode)
 		return
 	}
 	composer.SetGlobalSeed(*seed)
@@ -652,7 +653,7 @@ func toFloat(v any) float64 {
 
 // runLocal generates MIDI entirely via Go rule-based engines, no LLM.
 // Designed for offline use or quick iteration.
-func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int, runValidate bool, loopable bool, progression string) {
+func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int, runValidate bool, loopable bool, progression string, mode string) {
 	fmt.Println("[Local mode] Generating without LLM...")
 
 	// ── Parse key ────────────────────────────────────────────────
@@ -751,6 +752,12 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 	secRegister := buildSectionRegister(bars, energy)
 	blockRatio := 0.3 + energy*0.4
 
+	// Override key mode if --mode is set.
+	leadKeyMode := keyMode
+	if mode != "" {
+		leadKeyMode = mode
+	}
+
 	go func() {
 		defer wg.Done()
 		d := composer.GenerateDrumsStyled(chordStyle, bars, energy)
@@ -789,9 +796,9 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 		case chordStyle == "punk":
 			l = composer.GenerateLeadPunk(keyRoot, bars, energy)
 		case chordStyle == "pop" || chordStyle == "rpg" || chordStyle == "healing" || chordStyle == "victory":
-			l = composer.GeneratePianoLegend(keyRoot, keyMode, bars, chords)
+			l = composer.GeneratePianoLegend(keyRoot, leadKeyMode, bars, chords)
 		default:
-			l = composer.GenerateLeadMidra(keyRoot, keyMode, bars, stepProb, velMin, velMax, secDensity, secRegister, pentatonic)
+			l = composer.GenerateLeadMidra(keyRoot, leadKeyMode, bars, stepProb, velMin, velMax, secDensity, secRegister, pentatonic)
 		}
 		evMu.Lock()
 		evMap["lead"] = l

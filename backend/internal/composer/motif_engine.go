@@ -941,6 +941,14 @@ func getScaleDegrees(root, mode string) []int {
 	switch mode {
 	case "minor", "natural_minor":
 		intervals = []int{0, 2, 3, 5, 7, 8, 10}
+	case "dorian":
+		intervals = []int{0, 2, 3, 5, 7, 9, 10} // minor with raised 6th
+	case "phrygian":
+		intervals = []int{0, 1, 3, 5, 7, 8, 10} // minor with flat 2nd
+	case "lydian":
+		intervals = []int{0, 2, 4, 6, 7, 9, 11} // major with raised 4th
+	case "mixolydian":
+		intervals = []int{0, 2, 4, 5, 7, 9, 10} // major with flat 7th
 	default:
 		intervals = []int{0, 2, 4, 5, 7, 9, 11}
 	}
