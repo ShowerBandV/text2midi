@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/ShowerBandV/text2midi/internal/generator"
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
@@ -401,111 +400,6 @@ func GenerateChordsMidra(chords []string, totalBars int) []schema.NoteEvent {
 	return events
 }
 
-// Original GenerateBass kept for compatibility.
-func GenerateBass(chords []string, timeline *Timeline, darkness, energy, rhythmic, tension float64) []schema.NoteEvent {
-	var events []schema.NoteEvent
-	isMetal := darkness > 0.7 && energy > 0.7
-	isHipHop := rhythmic > 0.5 && energy > 0.3
-	isPop := energy > 0.4 && rhythmic < 0.5
-
-	for _, sec := range timeline.Sections {
-		octave := 2
-		if isHipHop {
-			octave = 1
-		} // 808 sub-bass
-		if isMetal {
-			octave = 2
-		} // low but punchy
-
-		for bar := sec.StartBar; bar < sec.EndBar; bar++ {
-			chord := chords[bar%len(chords)]
-			base := float64(bar) * 4.0
-			cp := chordPitchesForChord(chord, octave)
-			if len(cp) < 1 {
-				continue
-			}
-			root := cp[0]
-
-			switch {
-			case isMetal:
-				// Octave gallop: root - octave - root - fifth
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: root, StartBeat: base, DurationBeat: 0.25, Velocity: 100})
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: root + 12, StartBeat: base + 0.25, DurationBeat: 0.25, Velocity: 90})
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: root, StartBeat: base + 0.75, DurationBeat: 0.25, Velocity: 95})
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: root + 7, StartBeat: base + 2.0, DurationBeat: 0.5, Velocity: 85})
-
-			case isHipHop:
-				// 808 sliding bass: long root + slide to fifth
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: root, StartBeat: base, DurationBeat: 1.5, Velocity: 95})
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: root + 7, StartBeat: base + 1.5, DurationBeat: 0.5, Velocity: 85})
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: root - 12, StartBeat: base + 2.5, DurationBeat: 1.5, Velocity: 80})
-
-			case isPop:
-				// Walking bass: root - third - fifth - root
-				third := root + 4
-				fifth := root + 7
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: root, StartBeat: base, DurationBeat: 1.0, Velocity: 80})
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: third, StartBeat: base + 1.0, DurationBeat: 1.0, Velocity: 70})
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: fifth, StartBeat: base + 2.0, DurationBeat: 1.0, Velocity: 75})
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: root + 12, StartBeat: base + 3.0, DurationBeat: 1.0, Velocity: 70})
-
-			default:
-				// Root on 1, fifth on 3
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: root, StartBeat: base, DurationBeat: 2.0, Velocity: 85})
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: root + 7, StartBeat: base + 2.0, DurationBeat: 2.0, Velocity: 75})
-			}
-		}
-	}
-	return events
-}
-
-// ─── Style-aware pad ───────────────────────────────────────────
-
-func GeneratePad(chords []string, timeline *Timeline, darkness, energy, rhythmic, tension float64) []schema.NoteEvent {
-	var events []schema.NoteEvent
-	isMetal := darkness > 0.7 && energy > 0.7
-	isSlow := energy < 0.4 && rhythmic < 0.4
-	isPop := energy > 0.4 && rhythmic < 0.5
-
-	if isMetal {
-		return events
-	}
-
-	for _, sec := range timeline.Sections {
-		if sec.Energy < 0.2 && !isPop {
-			continue
-		}
-		energyFactor := 0.3 + sec.Energy*0.7
-
-		for bar := sec.StartBar; bar < sec.EndBar; bar++ {
-			chord := chords[bar%len(chords)]
-			base := float64(bar) * 4.0
-			cp := chordPitchesForChord(chord, 3)
-
-			if isSlow && len(cp) >= 3 {
-				// Ballad: arpeggiated broken chords (彩虹-like)
-				pat := []int{cp[0], cp[1], cp[2], cp[1], cp[0] + 12, cp[2], cp[1], cp[0]}
-				for i, p := range pat {
-					events = append(events, schema.NoteEvent{Type: "note", Pitch: p,
-						StartBeat: base + float64(i)*0.5, DurationBeat: 0.4, Velocity: 35 + int(energyFactor*25)})
-				}
-			} else if isPop && len(cp) >= 3 {
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: cp[0], StartBeat: base, DurationBeat: 4.0, Velocity: 25 + int(energyFactor*25)})
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: cp[2], StartBeat: base, DurationBeat: 4.0, Velocity: 25 + int(energyFactor*25)})
-				events = append(events, schema.NoteEvent{Type: "note", Pitch: cp[0] + 12, StartBeat: base, DurationBeat: 4.0, Velocity: 20 + int(energyFactor*20)})
-			} else {
-				for _, p := range cp {
-					events = append(events, schema.NoteEvent{Type: "note", Pitch: p,
-						StartBeat: base, DurationBeat: 4.0, Velocity: 30 + int(energyFactor*30)})
-				}
-			}
-		}
-	}
-	return events
-}
-
-// ─── Style-aware ExpandMelody ───────────────────────────────────
-
 func ExpandMelody(phrases []Phrase, basePitch, bpm int, darkness, energy, rhythmic, tension float64) []schema.NoteEvent {
 	var events []schema.NoteEvent
 	bar := 0
@@ -587,59 +481,3 @@ func ExpandMelody(phrases []Phrase, basePitch, bpm int, darkness, energy, rhythm
 
 // ─── Song Composer (final, no hardcoded values) ─────────────────
 
-// ComposeSong is the legacy wrapper. Use ComposeSongWithContext for new code.
-func ComposeSong(motif []int, chords []string, totalBars, basePitch, bpm int,
-	rng *rand.Rand, darkness, energy, rhythmic, tension float64) map[string][]schema.NoteEvent {
-	ctx := &GenerationContext{
-		Motif: motif, Chords: chords, TotalBars: totalBars,
-		BasePitch: basePitch, BPM: bpm, RNG: rng,
-		Darkness: darkness, Energy: energy, Rhythmic: rhythmic, Tension: tension,
-		DNA: DefaultDNA(),
-	}
-	return ComposeSongWithContext(ctx)
-}
-
-// ComposeSongWithContext is the DNA-aware composition entry point.
-func ComposeSongWithContext(ctx *GenerationContext) map[string][]schema.NoteEvent {
-	evMap := make(map[string][]schema.NoteEvent)
-	if len(ctx.Motif) < 2 {
-		ctx.Motif = []int{0, 2, 4, 3, 0}
-	}
-	if len(ctx.Chords) == 0 {
-		ctx.Chords = []string{"C", "G", "Am", "F"}
-	}
-	if ctx.RNG == nil {
-		ctx.RNG = rand.New(rand.NewSource(42))
-	}
-	if ctx.DNA == nil {
-		ctx.DNA = DefaultDNA()
-	}
-
-	// Step 1: Style-aware section lengths
-	sd := sectionDefsForStyle(ctx.Darkness, ctx.Energy, ctx.Rhythmic, ctx.Tension)
-	timeline := BuildTimeline(sd, ctx.TotalBars)
-	label := ctx.StyleLabel()
-	fmt.Printf("[SongComposer] %s, %d sections, %d bars (DNA=%s)\n",
-		label, len(timeline.Sections), ctx.TotalBars, ctx.DNA.Name)
-
-	// Step 2: Bass (DNA-aware)
-	evMap["bass"] = GenerateBass(ctx.Chords, timeline, ctx.Darkness, ctx.Energy, ctx.Rhythmic, ctx.Tension)
-	fmt.Printf("[Bass] %d events\n", len(evMap["bass"]))
-
-	// Step 3: Drums (DNA-aware)
-	evMap["drums"] = GenerateDrums(timeline, ctx.Darkness, ctx.Energy, ctx.Rhythmic, ctx.Tension)
-	fmt.Printf("[Drums] %d events\n", len(evMap["drums"]))
-
-	// Step 4: Lead melody is generated by LLM in main.go
-	evMap["lead"] = nil
-	// Step 5: Pad (DNA-aware)
-	evMap["pad"] = GeneratePad(ctx.Chords, timeline, ctx.Darkness, ctx.Energy, ctx.Rhythmic, ctx.Tension)
-	fmt.Printf("[Pad] %d events\n", len(evMap["pad"]))
-
-	// Step 6: FX / special effects (energy-driven)
-	evMap["fx"] = generator.GenerateFX(ctx.TotalBars, ctx.BPM, ctx.Energy, ctx.Tension)
-	fmt.Printf("[FX] %d events\n", len(evMap["fx"]))
-
-	fmt.Printf("[SongComposer] done: %d tracks\n", len(evMap))
-	return evMap
-}

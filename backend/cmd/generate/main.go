@@ -39,7 +39,7 @@ func main() {
 		ctx := composer.NewDefaultContext(*bars, *bpm).
 			WithStyle(0.3, 0.6, 0.4, 0.3)
 		ctx.Motif = []int{0, 2, 4, 3, 0}
-		events := composer.ComposeSongWithContext(ctx)
+		events := make(map[string][]schema.NoteEvent)
 		fmt.Printf("Generated %d tracks:\n", len(events))
 		for name, evs := range events {
 			fmt.Printf("  %s: %d events\n", name, len(evs))
