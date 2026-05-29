@@ -777,6 +777,10 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 		switch {
 		case chordStyle == "metal":
 			l = composer.GenerateLeadMetal(keyRoot, bars, energy)
+		case chordStyle == "rock":
+			l = composer.GenerateLeadRock(keyRoot, bars, energy)
+		case chordStyle == "punk":
+			l = composer.GenerateLeadPunk(keyRoot, bars, energy)
 		case chordStyle == "pop" || chordStyle == "rpg":
 			l = composer.GeneratePianoLegend(keyRoot, keyMode, bars, chords)
 		default:

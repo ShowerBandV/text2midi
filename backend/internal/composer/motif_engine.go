@@ -649,6 +649,183 @@ func chordRootMIDIPiano(chord string, octave int) int {
 	return 36
 }
 
+// GenerateLeadRock creates a blues-scale rock lead: double-stops, repeating licks, sparse.
+func GenerateLeadRock(keyRoot string, totalBars int, energy float64) []schema.NoteEvent {
+	scale := getBluesScale(keyRoot)
+	rng := rand.New(rand.NewSource(42))
+	var events []schema.NoteEvent
+
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+		sec := songSection(bar, totalBars)
+		root := scale[0] + 12*3
+
+		switch sec {
+		case "intro":
+			// Intro: repeating blues lick — 4 notes, call and response.
+			lick := []int{root + 3, root, root + 2, root - 2}
+			for i, p := range lick {
+				if p < 48 {
+					p += 12
+				}
+				// Double-stop: play the note + a 4th above.
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p,
+					StartBeat: base + float64(i)*0.5, DurationBeat: 0.2,
+					Velocity: 100,
+				})
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p + 5,
+					StartBeat: base + float64(i)*0.5, DurationBeat: 0.2,
+					Velocity: 90,
+				})
+			}
+
+		case "verse":
+			// Verse: sparse, only every other bar. One short lick, then rest.
+			if bar%4 < 2 {
+				lick := []int{root + 3, root, root + 2}
+				for i, p := range lick {
+					events = append(events, schema.NoteEvent{
+						Type: "note", Pitch: p,
+						StartBeat: base + 1.0 + float64(i)*0.75, DurationBeat: 0.3,
+						Velocity: 85,
+					})
+				}
+			}
+
+		case "chorus", "chorus2":
+			// Chorus: double-stop lick every bar, more aggressive.
+			lick := []int{root + 3, root, root + 2, root - 2, root + 7}
+			for i, p := range lick {
+				if p < 48 {
+					p += 12
+				}
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p,
+					StartBeat: base + float64(i)*0.4, DurationBeat: 0.15,
+					Velocity: 105,
+				})
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p + 5,
+					StartBeat: base + float64(i)*0.4, DurationBeat: 0.15,
+					Velocity: 95,
+				})
+			}
+
+		case "bridge":
+			// Bridge: longer solo-like phrase with bends (simulated by quick neighbor notes).
+			solo := []int{root, root + 3, root + 7, root + 10, root + 12, root + 10, root + 7, root + 3}
+			for i, p := range solo {
+				// Bend: quick neighbor before target.
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p - 1,
+					StartBeat: base + float64(i)*0.35 - 0.03, DurationBeat: 0.04,
+					Velocity: 70,
+				})
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p,
+					StartBeat: base + float64(i)*0.35, DurationBeat: 0.2,
+					Velocity: 95 + rng.Intn(15),
+				})
+			}
+
+		case "outro":
+			// Outro: just the first lick, fading.
+			lick := []int{root + 3, root}
+			for i, p := range lick {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p,
+					StartBeat: base + float64(i)*1.0, DurationBeat: 0.5,
+					Velocity: 70,
+				})
+			}
+		}
+	}
+
+	fmt.Printf("[Lead-Rock] %d events, %d bars (blues double-stops)\n", len(events), totalBars)
+	return events
+}
+
+// GenerateLeadPunk creates punk lead: short 3-4 note licks, octave unison, mostly rests.
+func GenerateLeadPunk(keyRoot string, totalBars int, energy float64) []schema.NoteEvent {
+	scale := getScaleDegrees(keyRoot, "minor")
+	if len(scale) == 0 {
+		scale = []int{0, 2, 3, 5, 7, 8, 10}
+	}
+	var events []schema.NoteEvent
+
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+		sec := songSection(bar, totalBars)
+		root := scale[0] + 12*3
+
+		// Punk lead is MINIMAL — only plays in intro and sometimes chorus.
+		switch sec {
+		case "intro":
+			// Short 4-note lick, octave unison.
+			lick := []int{root, root + 3, root + 5, root + 3}
+			for i, p := range lick {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p,
+					StartBeat: base + float64(i)*0.5, DurationBeat: 0.12,
+					Velocity: 110,
+				})
+				// Octave unison.
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p + 12,
+					StartBeat: base + float64(i)*0.5, DurationBeat: 0.12,
+					Velocity: 105,
+				})
+			}
+
+		case "chorus", "chorus2":
+			// One short lick at the start of each chorus phrase.
+			if bar%4 == 0 {
+				lick := []int{root, root + 5, root + 7}
+				for i, p := range lick {
+					events = append(events, schema.NoteEvent{
+						Type: "note", Pitch: p,
+						StartBeat: base + float64(i)*0.4, DurationBeat: 0.1,
+						Velocity: 110,
+					})
+					events = append(events, schema.NoteEvent{
+						Type: "note", Pitch: p + 12,
+						StartBeat: base + float64(i)*0.4, DurationBeat: 0.1,
+						Velocity: 105,
+					})
+				}
+			}
+
+		// Verse, bridge, outro: lead rests. Rhythm guitar carries everything.
+		}
+	}
+
+	fmt.Printf("[Lead-Punk] %d events, %d bars (octave licks, mostly rests)\n", len(events), totalBars)
+	return events
+}
+
+// getBluesScale returns MIDI pitches for blues scale (1-b3-4-b5-5-b7).
+func getBluesScale(root string) []int {
+	rootSemi := map[string]int{
+		"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5,
+		"F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11,
+	}
+	rs := rootSemi[root]
+	intervals := []int{0, 3, 5, 6, 7, 10} // blues: 1-b3-4-b5-5-b7
+	result := make([]int, 0, len(intervals)*4)
+	for oct := 3; oct <= 5; oct++ {
+		base := (oct + 1) * 12
+		for _, iv := range intervals {
+			p := base + rs + iv
+			if p >= 36 && p <= 96 {
+				result = append(result, p)
+			}
+		}
+	}
+	return result
+}
+
 func getDiminishedDegrees(root string) []int {
 	rootSemi := map[string]int{
 		"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5,
