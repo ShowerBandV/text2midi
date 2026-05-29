@@ -438,7 +438,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
             <div className="relative piano-grid" style={{ '--col-w': `${COLUMN_WIDTH}px`, '--row-h': `${ROW_HEIGHT}px`, height: `${PIANO_ROWS.length * ROW_HEIGHT}px`, width: `${GRID_COLUMNS * COLUMN_WIDTH}px` }}>
               
               {/* Grid cell matrix trigger elements */}
-              {PIANO_ROWS.map((pitch, rowIdx) => {
+              {useMemo(() => PIANO_ROWS.map((pitch, rowIdx) => {
                 const topVal = rowIdx * ROW_HEIGHT;
                 return Array.from({ length: GRID_COLUMNS }).map((_, colIdx) => {
                   const leftVal = colIdx * COLUMN_WIDTH;
@@ -457,7 +457,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
                     />
                   );
                 });
-              })}
+              }), [PIANO_ROWS.length, COLUMN_WIDTH, ROW_HEIGHT, GRID_COLUMNS])}
 
               {/* Render loaded note rectangular blocks */}
               {notes.map((note) => {
