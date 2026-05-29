@@ -427,7 +427,7 @@ const COLUMN_WIDTH = 40 * zoomLevel; // pixels per half beat
           </div>
 
           {/* Playhead & Grid scroll container */}
-          <div ref={pianoCanvasRef} onScroll={handleGridScroll} className="flex-grow overflow-auto relative min-h-0" style={{backgroundSize: `${COLUMN_WIDTH}px ${ROW_HEIGHT}px`, backgroundImage: `linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px)`}} id="piano-roll-canvas">
+          <div ref={pianoCanvasRef} onScroll={handleGridScroll} className="flex-grow overflow-auto relative min-h-0 piano-grid" style={{'--col-w': `${COLUMN_WIDTH}px`, '--row-h': `${ROW_HEIGHT}px`}} id="piano-roll-canvas">
             
             {/* Playhead Line Indicator Component */}
             <div
