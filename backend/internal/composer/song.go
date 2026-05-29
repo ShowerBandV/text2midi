@@ -594,11 +594,11 @@ func GenerateDrumsStyled(style string, totalBars int, energy float64) []schema.N
 		events = GenerateDrumsMidra(totalBars, density)
 	}
 	// Apply groove variant: half-time bridge, shuffle verse2.
-	return applyDrumVariant(events, totalBars)
+	return applyGrooveVariant(events, totalBars)
 }
 
-// applyDrumVariant modifies drum events per section for groove variety.
-func applyDrumVariant(events []schema.NoteEvent, totalBars int) []schema.NoteEvent {
+// applyGrooveVariant modifies drum events per section for groove variety.
+func applyGrooveVariant(events []schema.NoteEvent, totalBars int) []schema.NoteEvent {
 	for i := range events {
 		bar := int(events[i].StartBeat) / 4
 		v := drumVariant(bar, totalBars)
