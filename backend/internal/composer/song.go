@@ -231,6 +231,8 @@ func GenerateBassStyled(style string, chords []string, totalBars int) []schema.N
 		return bassPop(chords, totalBars)
 	case "trap":
 		return bassTrap(chords, totalBars)
+	case "ambient", "casual":
+		return bassCasual(chords, totalBars)
 	default:
 		return GenerateBassMidra(chords, totalBars)
 	}
@@ -374,6 +376,26 @@ func bassPop(chords []string, totalBars int) []schema.NoteEvent {
 		}
 	}
 	fmt.Printf("[Bass-Pop] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
+// bassCasual: Simple bass for casual games. Root on beat 1, gentle.
+func bassCasual(chords []string, totalBars int) []schema.NoteEvent {
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		chord := chords[bar%len(chords)]
+		root := chordRootMIDI(chord, 2)
+		base := float64(bar) * 4.0
+		// Single root note on beat 1, held for 3 beats.
+		if bar%2 == 0 {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: root,
+				StartBeat: base, DurationBeat: 3.0,
+				Velocity: 100,
+			})
+		}
+	}
+	fmt.Printf("[Bass-Casual] %d events, %d bars\n", len(events), totalBars)
 	return events
 }
 
@@ -561,6 +583,8 @@ func GenerateDrumsStyled(style string, totalBars int, energy float64) []schema.N
 		return drumsPop(totalBars, energy)
 	case "trap":
 		return drumsTrap(totalBars, energy)
+	case "ambient", "casual":
+		return drumsCasual(totalBars, energy)
 	default:
 		density := energy * 0.5
 		if density < 0.15 {
@@ -1042,6 +1066,30 @@ func drumsEmo(totalBars int, energy float64) []schema.NoteEvent {
 	return events
 }
 
+// drumsCasual: Minimal drums for casual games. Soft kick on 1, rim-click on 3, nothing else.
+func drumsCasual(totalBars int, energy float64) []schema.NoteEvent {
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+		// Soft kick on beat 1.
+		events = append(events, schema.NoteEvent{
+			Type: "note", Pitch: 36, DrumName: "kick",
+			StartBeat: base, DurationBeat: 0.2,
+			Velocity: 100,
+		})
+		// Soft rim-click on beat 3.
+		if bar%2 == 0 {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 37, DrumName: "rim_click",
+				StartBeat: base + 2.0, DurationBeat: 0.1,
+				Velocity: 100,
+			})
+		}
+	}
+	fmt.Printf("[Drums-Casual] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
 // drumsTrap: Trap drums. Sparse hard kick, 16th hi-hats with rolls, clap on 2/4. Dre bounce.
 func drumsTrap(totalBars int, energy float64) []schema.NoteEvent {
 	var events []schema.NoteEvent
@@ -1475,8 +1523,8 @@ func GenerateChordsStyled(style string, chords []string, totalBars int, blockRat
 		return chordsPower(chords, totalBars, "punk")
 	case "rock":
 		return chordsPower(chords, totalBars, "rock")
-	case "ambient":
-		return chordsAmbient(chords, totalBars)
+	case "ambient", "casual":
+		return chordsCasual(chords, totalBars)
 	case "pop", "rpg":
 		return chordsPop(chords, totalBars)
 	case "trap":
@@ -1578,6 +1626,36 @@ func chordsPower(chords []string, totalBars int, style string) []schema.NoteEven
 		}
 	}
 	fmt.Printf("[Chords-Power] %d events, %d bars (style=%s)\n", len(events), totalBars, style)
+	return events
+}
+
+// chordsCasual: Soft, simple chords for casual games. Gentle, not muddy.
+func chordsCasual(chords []string, totalBars int) []schema.NoteEvent {
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		chord := chords[bar%len(chords)]
+		root := chordRootMIDI(chord, 3) // C3 range — higher, cleaner
+		base := float64(bar) * 4.0
+		// Simple triad: root + 3rd + 5th, held for 2 bars, gentle.
+		isMinor := strings.Contains(chord, "m")
+		third := root + 4
+		if isMinor {
+			third = root + 3
+		}
+		if bar%2 == 0 {
+			for _, p := range []int{root, third, root + 7} {
+				if p < 40 || p > 72 {
+					continue
+				}
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p,
+					StartBeat: base, DurationBeat: 7.5,
+					Velocity: 100,
+				})
+			}
+		}
+	}
+	fmt.Printf("[Chords-Casual] %d events, %d bars\n", len(events), totalBars)
 	return events
 }
 
