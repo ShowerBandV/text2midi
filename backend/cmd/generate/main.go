@@ -36,6 +36,7 @@ func main() {
 	loopable := flag.Bool("loopable", false, "Make outro connect seamlessly to intro for game loop")
 	progression := flag.String("progression", "", "Chord progression: warm/dark/hopeful/epic/tense/bright (overrides style default)")
 	mode := flag.String("mode", "", "Scale mode: dorian/phrygian/lydian/mixolydian (overrides style default)")
+	sf2 := flag.String("sf2", "", "SF2 profile path for instrument key range constraints")
 	flag.Parse()
 
 	if *prompt == "" && !*local {
@@ -49,7 +50,7 @@ func main() {
 	// Local mode: skip LLM, use rule-based generation directly.
 	if *local {
 		composer.SetGlobalSeed(*seed)
-		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate, *loopable, *progression, *mode)
+		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate, *loopable, *progression, *mode, *sf2)
 		return
 	}
 	composer.SetGlobalSeed(*seed)
@@ -480,11 +481,18 @@ func main() {
 
 	// ── Full validator (opt-in with --validate) ──────────────────
 	if *validate {
-		report := validator.Validate(midiIR, plan.TotalBars, true) // autoFix=true
+		report := validator.Validate(midiIR, plan.TotalBars, true)
 		fmt.Print(validator.FormatReport(report))
 		if !report.Passed {
 			fmt.Fprintf(os.Stderr, "Validation FAILED with %d errors\n", len(report.Errors))
 			os.Exit(1)
+		}
+	}
+
+	// ── SF2 key range constraints ─────────────────────────────
+	if *sf2 != "" {
+		if p, e := musicdna.LoadSF2Profile(*sf2); e == nil {
+			musicdna.ApplySF2Constraints(&midiIR, p)
 		}
 	}
 
@@ -658,7 +666,7 @@ func toFloat(v any) float64 {
 
 // runLocal generates MIDI entirely via Go rule-based engines, no LLM.
 // Designed for offline use or quick iteration.
-func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int, runValidate bool, loopable bool, progression string, mode string) {
+func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int, runValidate bool, loopable bool, progression string, mode string, sf2Path string) {
 	fmt.Println("[Local mode] Generating without LLM...")
 
 	// ── Parse key ────────────────────────────────────────────────
@@ -892,6 +900,12 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 		flattenVelocities(evMap, flatVel)
 	}
 
+	// ── SF2 profile loading ───────────────────────────────────
+	var sf2Profile *musicdna.SF2Profile
+	if sf2Path != "" {
+		sf2Profile, _ = musicdna.LoadSF2Profile(sf2Path)
+	}
+
 	// ── Render MIDI ──────────────────────────────────────────────
 	midiIR := schema.MidiIR{
 		Meta: schema.Meta{
@@ -924,6 +938,11 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 			fmt.Fprintf(os.Stderr, "Validation FAILED with %d errors\n", len(report.Errors))
 			os.Exit(1)
 		}
+	}
+
+	// ── SF2 key range constraints ─────────────────────────────
+	if sf2Profile != nil {
+		musicdna.ApplySF2Constraints(&midiIR, sf2Profile)
 	}
 
 	result, err := midi.RenderMIDI(midiIR, outputPath, nil)

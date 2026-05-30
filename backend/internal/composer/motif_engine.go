@@ -397,7 +397,9 @@ func GenerateLeadMetal(keyRoot string, totalBars int, energy float64) []schema.N
 		// ── BRIDGE: SOLO — sweep + tremolo + whammy + neo-classical ──
 		case "bridge":
 			root := scale[0] + 12*3
-			if bar%2 == 0 {
+			dim := getDiminishedDegrees(keyRoot)
+			// First half of bridge: sweep+tap. Second half: neo-classical diminished runs.
+			if bar%4 < 2 && bar%2 == 0 {
 				// Sweep + tap.
 				up := []int{root, root + 4, root + 7, root + 12, root + 16, root + 19}
 				for i, p := range up {
@@ -417,6 +419,23 @@ func GenerateLeadMetal(keyRoot string, totalBars int, energy float64) []schema.N
 						Type: "note", Pitch: top,
 						StartBeat: base + 0.6 + float64(rep)*0.06, DurationBeat: 0.04,
 						Velocity: 100,
+					})
+				}
+			} else if bar%4 >= 2 {
+				// Neo-classical: diminished arpeggio with chromatic passing tones.
+				start := dim[0] + 12*3
+				for step := 0; step < 6; step++ {
+					p := start + step*3
+					if p < 48 || p > 96 { continue }
+					events = append(events, schema.NoteEvent{
+						Type: "note", Pitch: p,
+						StartBeat: base + float64(step)*0.15, DurationBeat: 0.08,
+						Velocity: 105,
+					})
+					events = append(events, schema.NoteEvent{
+						Type: "note", Pitch: p - 1,
+						StartBeat: base + float64(step)*0.15 + 0.06, DurationBeat: 0.04,
+						Velocity: 70,
 					})
 				}
 			} else {

@@ -1,0 +1,31 @@
+{
+  "_comment": "SF2 instrument key ranges. Used to constrain generated pitches to valid ranges.",
+  "instruments": {
+    "0": { "name": "Acoustic Grand Piano", "key_range": [21, 108] },
+    "1": { "name": "Bright Acoustic Piano", "key_range": [21, 108] },
+    "25": { "name": "Acoustic Guitar (nylon)", "key_range": [40, 84] },
+    "26": { "name": "Acoustic Guitar (steel)", "key_range": [40, 84] },
+    "27": { "name": "Electric Guitar (clean)", "key_range": [40, 84] },
+    "28": { "name": "Electric Guitar (muted)", "key_range": [40, 84] },
+    "29": { "name": "Overdriven Guitar", "key_range": [36, 84] },
+    "30": { "name": "Distortion Guitar", "key_range": [36, 84] },
+    "33": { "name": "Electric Bass (finger)", "key_range": [28, 60] },
+    "34": { "name": "Electric Bass (pick)", "key_range": [28, 60] },
+    "39": { "name": "Synth Bass 1", "key_range": [24, 72] },
+    "40": { "name": "Violin", "key_range": [55, 96] },
+    "41": { "name": "Viola", "key_range": [48, 84] },
+    "42": { "name": "Cello", "key_range": [36, 72] },
+    "43": { "name": "Contrabass", "key_range": [28, 55] },
+    "48": { "name": "String Ensemble 1", "key_range": [36, 96] },
+    "49": { "name": "String Ensemble 2", "key_range": [36, 96] },
+    "56": { "name": "Trumpet", "key_range": [55, 84] },
+    "57": { "name": "Trombone", "key_range": [48, 79] },
+    "58": { "name": "Tuba", "key_range": [28, 55] },
+    "61": { "name": "Brass Section", "key_range": [40, 84] },
+    "62": { "name": "Synth Brass 1", "key_range": [36, 84] },
+    "91": { "name": "Pad (warm)", "key_range": [36, 96] },
+    "92": { "name": "Pad (bowed)", "key_range": [36, 96] },
+    "95": { "name": "Pad (sweep)", "key_range": [36, 96] },
+    "97": { "name": "FX (crystal)", "key_range": [48, 108] }
+  }
+}
