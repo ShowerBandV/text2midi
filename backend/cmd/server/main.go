@@ -12,8 +12,8 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -127,19 +126,15 @@ func (srv *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 
 type contextKey string
 
-func contextWithUser(r *http.Request, u *user.User) *http.Request {
-	// Simplified: store in header (not ideal, but avoids full context package)
-	r.Header.Set("X-User-ID", strconv.FormatInt(u.ID, 10))
-	r.Header.Set("X-Username", u.Username)
-	return r
+type userCtxKey struct{}
+
+func contextWithUser(ctx context.Context, u *user.User) context.Context {
+	return context.WithValue(ctx, userCtxKey{}, u)
 }
 
-func userFromRequest(r *http.Request) *user.User {
-	id, _ := strconv.ParseInt(r.Header.Get("X-User-ID"), 10, 64)
-	if id == 0 {
-		return nil
-	}
-	return &user.User{ID: id, Username: r.Header.Get("X-Username")}
+func userFromContext(ctx context.Context) *user.User {
+	u, _ := ctx.Value(userCtxKey{}).(*user.User)
+	return u
 }
 
 // ─── Auth handlers ─────────────────────────────────────────────────
@@ -196,7 +191,7 @@ func (srv *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (srv *Server) handleGetPrefs(w http.ResponseWriter, r *http.Request) {
-	u := userFromRequest(r)
+	u := userFromContext(r.Context())
 	if u == nil {
 		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 		return
@@ -206,7 +201,7 @@ func (srv *Server) handleGetPrefs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (srv *Server) handleSavePrefs(w http.ResponseWriter, r *http.Request) {
-	u := userFromRequest(r)
+	u := userFromContext(r.Context())
 	if u == nil {
 		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 		return
@@ -224,7 +219,7 @@ func (srv *Server) handleSavePrefs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (srv *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
-	u := userFromRequest(r)
+	u := userFromContext(r.Context())
 	if u == nil {
 		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 		return
