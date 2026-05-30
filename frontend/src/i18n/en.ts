@@ -1,0 +1,104 @@
+export const en = {
+  // Navbar
+  "nav.generate": "Generate",
+  "nav.library": "Library",
+  "nav.signIn": "Sign In",
+  "nav.logout": "Logout",
+  "nav.user": "User",
+
+  // Auth modal
+  "auth.welcomeBack": "Welcome back",
+  "auth.join": "Join MidiMind",
+  "auth.signInTo": "Sign in to your account",
+  "auth.createFree": "Create your free account",
+  "auth.signIn": "Sign In",
+  "auth.register": "Register",
+  "auth.username": "Username",
+  "auth.enterUsername": "Enter your username",
+  "auth.password": "Password",
+  "auth.enterPassword": "Enter your password",
+  "auth.atLeast6": "At least 6 characters",
+  "auth.pleaseWait": "Please wait...",
+  "auth.createAccount": "Create Account",
+  "auth.fillBoth": "Please fill in both fields",
+
+  // Generate page
+  "gen.title": "Turn Words Into",
+  "gen.titleHighlight": "Music",
+  "gen.subtitle": "Describe the sound you hear in your head — a moody synth arpeggio, a jazz piano ballad, a cinematic orchestral swell — and our engine crafts a production-ready MIDI file in seconds.",
+  "gen.placeholder": "A melancholic jazz piano solo in C minor...",
+  "gen.presetCyberpunk": "CYBERPUNK",
+  "gen.presetJazz": "JAZZ CHORDS",
+  "gen.presetString": "STRING PAD",
+  "gen.generate": "Generate MIDI",
+  "gen.loginRequired": "Please sign in first to generate MIDI",
+
+  // Feature cards
+  "feat.engine": "Intelligent Composition Engine",
+  "feat.engineDesc": "Parses your natural language prompt, analyzes musical intent, and generates a full multi-track arrangement — drums, bass, chords, leads, and pads — with proper music theory under the hood.",
+  "feat.llm": "LLM-Powered",
+  "feat.llmDesc": "Connect your own LLM API key and unlock deeper musical intelligence — richer harmonic progressions, more expressive arrangements, and style-adaptive composition.",
+  "feat.arrangement": "Full Arrangement",
+  "feat.arrangementDesc": "Every generation delivers a complete arrangement — drums, bass, chords, leads, and pads — all separated across multiple MIDI tracks. Import straight into any DAW.",
+  "feat.realtime": "Real-Time Generator",
+  "feat.realtimeDesc": "High-performance MIDI generation with instant download. Built-in user accounts, generation history, and MusicDNA analysis — so you can track, revisit, and learn from every creation.",
+
+  // Loading
+  "load.analyzing": "Analyzing prompt semantics...",
+  "load.querying": "Querying MidiMind musical brain...",
+  "load.chords": "Selecting chord intervals...",
+  "load.beats": "Generating beat triggers...",
+  "load.velocity": "Polishing velocity expressions...",
+  "load.synthesizing": "Synthesizing low-latency MIDI file...",
+
+  // Library
+  "lib.title": "Library",
+  "lib.empty": "No tracks yet",
+  "lib.emptyHint": "Go to Generate tab to create your first MIDI.",
+  "lib.export": "Export",
+  "lib.download": "Download .mid",
+  "lib.downloadLocal": "Download locally",
+  "lib.downloadServer": "Download from server",
+  "lib.fromServer": "From Server",
+  "lib.fromServerDesc": "Original backend file",
+  "lib.share": "Share",
+  "lib.copyLink": "Copy Link",
+  "lib.copied": "Copied!",
+  "lib.preview": "Preview",
+  "lib.previewDesc": "Browser audio render",
+
+  // Metadata
+  "meta.duration": "Duration",
+  "meta.key": "Key",
+  "meta.tempo": "Tempo",
+  "meta.complexity": "Complexity",
+  "meta.seed": "SEED",
+  "meta.bpm": "BPM",
+
+  // Library features
+  "feat.chordDetection": "Chord Detection",
+  "feat.chordDetectionDesc": "Detect chords from MIDI notes",
+  "feat.regenerate": "AI Regenerate",
+  "feat.regenerateDesc": "Create a variation of this track",
+  "feat.regenerating": "Generating...",
+  "feat.regenerateBtn": "Regenerate",
+  "feat.dna": "DNA Analysis",
+  "feat.dnaDesc": "MusicDNA structure & quality",
+  "feat.quality": "Quality:",
+
+  // Info bar
+  "info.styles": "Styles",
+  "info.tiers": "Tiers",
+  "info.bars": "bars",
+
+  // Footer
+  "footer.tagline": "AI-powered MIDI generation — turn your ideas into music.",
+  "footer.terms": "Terms",
+  "footer.privacy": "Privacy",
+  "footer.api": "API",
+  "footer.discord": "Discord",
+  "footer.twitter": "Twitter / X",
+
+  // Misc
+  "buyMeCoffee": "Buy me a coffee",
+};

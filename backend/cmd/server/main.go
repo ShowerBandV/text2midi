@@ -73,6 +73,8 @@ func main() {
 		mux.HandleFunc("PUT /api/user/prefs", srv.requireAuth(srv.handleSavePrefs))
 		mux.HandleFunc("GET /api/user/history", srv.requireAuth(srv.handleHistory))
 		mux.HandleFunc("GET /api/user/history/{id}", srv.requireAuth(srv.handleHistoryDetail))
+		mux.HandleFunc("GET /api/user/credits", srv.requireAuth(srv.handleCredits))
+		mux.HandleFunc("POST /api/user/credits/add", srv.requireAuth(srv.handleAddCredits))
 	}
 
 	mux.HandleFunc("GET /api/info", srv.handleInfo)
@@ -158,8 +160,9 @@ func (srv *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Auto-login: create session.
 	_, token, _ := user.Login(req.Username, req.Password)
 	writeJSON(w, 201, map[string]any{
-		"user":  u,
-		"token": token,
+		"user":    u,
+		"token":   token,
+		"credits": user.CheckCredits(u.ID),
 	})
 }
 
@@ -178,8 +181,9 @@ func (srv *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{
-		"user":  u,
-		"token": token,
+		"user":    u,
+		"token":   token,
+		"credits": user.CheckCredits(u.ID),
 	})
 }
 
@@ -249,6 +253,33 @@ func (srv *Server) handleHistoryDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, entry)
 }
 
+func (srv *Server) handleCredits(w http.ResponseWriter, r *http.Request) {
+	u := userFromContext(r.Context())
+	if u == nil {
+		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		return
+	}
+	credits := user.CheckCredits(u.ID)
+	writeJSON(w, 200, map[string]any{"credits": credits})
+}
+
+func (srv *Server) handleAddCredits(w http.ResponseWriter, r *http.Request) {
+	u := userFromContext(r.Context())
+	if u == nil {
+		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		return
+	}
+	var req struct {
+		Amount int `json:"amount"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Amount <= 0 {
+		writeJSON(w, 400, map[string]string{"error": "invalid amount"})
+		return
+	}
+	user.AddCredits(u.ID, req.Amount)
+	writeJSON(w, 200, map[string]any{"credits": user.CheckCredits(u.ID)})
+}
+
 // Server holds shared state for HTTP handlers.
 type Server struct {
 	fs        *store.FileStore
@@ -277,14 +308,15 @@ type GenerateRequest struct {
 }
 
 type GenerateResponse struct {
-	Success  bool              `json:"success"`
-	FileID   string            `json:"fileId,omitempty"`
-	FileName string            `json:"fileName,omitempty"`
-	FileSize int64             `json:"fileSize,omitempty"`
-	Duration float64           `json:"durationSeconds"`
-	Tracks   int               `json:"tracks"`
+	Success  bool               `json:"success"`
+	FileID   string             `json:"fileId,omitempty"`
+	FileName string             `json:"fileName,omitempty"`
+	FileSize int64              `json:"fileSize,omitempty"`
+	Duration float64            `json:"durationSeconds"`
+	Tracks   int                `json:"tracks"`
+	Credits  int                `json:"credits,omitempty"`
 	Meta     *midi.RenderResult `json:"meta,omitempty"`
-	Error    string            `json:"error,omitempty"`
+	Error    string             `json:"error,omitempty"`
 }
 
 type ErrorResponse struct {
@@ -311,6 +343,17 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
+	// Check user credits if authenticated.
+	if u := userFromContext(r.Context()); u != nil {
+		credits := user.CheckCredits(u.ID)
+		if credits <= 0 {
+			writeJSON(w, 402, map[string]any{
+				"error": "out of generations — add credits via POST /api/user/credits/add",
+			})
+			return
+		}
+	}
+
 	var req GenerateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
@@ -352,6 +395,22 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Consume credit after successful generation.
+	if u := userFromContext(r.Context()); u != nil {
+		if remaining, ok := user.ConsumeCredit(u.ID); ok {
+			writeJSON(w, http.StatusOK, GenerateResponse{
+				FileID:   result.FileID,
+				FileName: result.FileName,
+				FileSize: result.FileSize,
+				Duration: result.Duration,
+				Tracks:   result.Tracks,
+				Meta:     result.Meta,
+				Credits:  remaining,
+			})
+			return
+		}
+		// Credit consumption failed (shouldn't happen since we checked above).
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 

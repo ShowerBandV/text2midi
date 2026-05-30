@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
-import { MidiTrack, InstrumentType } from "../types";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { MidiTrack, InstrumentType, MidiNote } from "../types";
 import { generateMidiFileBlobUrl, playNote } from "../utils/audio";
-import { getDownloadUrl } from "../utils/api";
+import { getDownloadUrl, generateMidi } from "../utils/api";
+import { detectChords, notesToDNEEvents, pitchToMidi, DetectedChord } from "../utils/chords";
+import * as api from "../utils/api";
+import { useT } from "../i18n";
 import {
   Download,
   Copy,
@@ -17,7 +20,13 @@ import {
   Disc2,
   Server,
   Coffee,
-  Trash2
+  Trash2,
+  Guitar,
+  WandSparkles,
+  Dna,
+  ChevronDown,
+  ChevronRight,
+  RefreshCw
 } from "lucide-react";
 
 interface LibraryProps {
@@ -34,6 +43,7 @@ export default function Library({
   activeTrackId,
   setActiveTrackId,
 }: LibraryProps) {
+  const t = useT();
   const activeTrack = tracks.find(t => t.id === activeTrackId) || tracks[0];
   const [copied, setCopied] = useState(false);
   const [liked, setLiked] = useState(false);
@@ -45,6 +55,92 @@ export default function Library({
   const playheadRef = useRef<number>(0);
 
   const triggerSearchRef = useRef<Set<string>>(new Set());
+
+  // ─── Feature panel states ────────────────────────────────────────
+  const [chords, setChords] = useState<DetectedChord[]>([]);
+  const [showChords, setShowChords] = useState(false);
+  const [dnaResult, setDnaResult] = useState<any>(null);
+  const [showDna, setShowDna] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [loadingChords, setLoadingChords] = useState(false);
+  const [loadingDna, setLoadingDna] = useState(false);
+
+  const runChordDetection = useCallback(() => {
+    if (chords.length > 0) { setShowChords(!showChords); return; }
+    setLoadingChords(true);
+    // Small delay so UI isn't janky
+    setTimeout(() => {
+      const detected = detectChords(activeTrack?.notes || [], 8);
+      setChords(detected);
+      setShowChords(true);
+      setLoadingChords(false);
+    }, 100);
+  }, [activeTrack, chords, showChords]);
+
+  const runDNAAnalysis = useCallback(async () => {
+    if (dnaResult) { setShowDna(!showDna); return; }
+    if (!activeTrack) return;
+    setLoadingDna(true);
+    try {
+      const events = notesToDNEEvents(activeTrack.notes);
+      const res = await api.extractDNA({
+        events_by_track: { main: events },
+        total_bars: Math.max(1, Math.ceil(
+          (activeTrack.notes.reduce((max, n) => Math.max(max, n.time + n.duration), 0)) / 4
+        )),
+        key: `${activeTrack.metadata.key} ${activeTrack.metadata.scale}`,
+      });
+      setDnaResult(res);
+      setShowDna(true);
+    } catch (err) {
+      console.error("DNA analysis failed:", err);
+    } finally {
+      setLoadingDna(false);
+    }
+  }, [activeTrack, dnaResult, showDna]);
+
+  const handleRegenerate = async () => {
+    if (!activeTrack || regenerating) return;
+    setRegenerating(true);
+    try {
+      const res = await generateMidi({
+        prompt: activeTrack.metadata.title,
+        style: activeTrack.metadata.genre?.toLowerCase() || "pop",
+        bpm: activeTrack.metadata.tempo,
+        key: `${activeTrack.metadata.key} ${activeTrack.metadata.scale}`,
+        bars: 8,
+        tier: "free",
+      });
+      if (res.fileId) {
+        const newTrack: MidiTrack = {
+          id: "track-" + Date.now(),
+          notes: activeTrack.notes,
+          metadata: {
+            title: (res.fileName || res.meta?.output_path?.split("/").pop()?.replace(".mid", "") || activeTrack.metadata.title) + " (variation)",
+            seed: Math.floor(Math.random() * 9000000) + 1000000,
+            tempo: activeTrack.metadata.tempo,
+            key: activeTrack.metadata.key,
+            scale: activeTrack.metadata.scale,
+            complexity: activeTrack.metadata.complexity,
+            genre: activeTrack.metadata.genre || "Generated",
+            durationStr: res.durationSeconds
+              ? Math.floor(res.durationSeconds / 60) + ":" + String(Math.floor(res.durationSeconds % 60)).padStart(2, "0")
+              : activeTrack.metadata.durationStr,
+          },
+          instrument: activeTrack.instrument,
+          globalVelocity: activeTrack.globalVelocity,
+          createdAt: new Date().toISOString(),
+          fileId: res.fileId,
+        };
+        setTracks([newTrack, ...tracks]);
+        setActiveTrackId(newTrack.id);
+      }
+    } catch (err) {
+      console.error("Regenerate failed:", err);
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   // Copy link action callback
   const handleCopyLink = () => {
@@ -160,8 +256,8 @@ export default function Library({
         <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center mb-4">
           <Music className="w-7 h-7 text-primary" />
         </div>
-        <p className="text-sm font-medium mb-1">No tracks yet</p>
-        <p className="text-xs opacity-60">Go to Generate tab to create your first MIDI.</p>
+        <p className="text-sm font-medium mb-1">{t("lib.empty")}</p>
+        <p className="text-xs opacity-60">{t("lib.emptyHint")}</p>
       </div>
     );
   }
@@ -179,7 +275,7 @@ export default function Library({
       <aside className="w-72 min-w-[16rem] flex flex-col gap-3 overflow-y-auto flex-shrink-0">
         <div className="flex items-center justify-between px-1">
           <h3 className="text-xs text-on-surface-variant uppercase tracking-widest font-semibold">
-            Library <span className="text-primary">({tracks.length})</span>
+            {t("lib.title")} <span className="text-primary">({tracks.length})</span>
           </h3>
         </div>
 
@@ -228,16 +324,16 @@ export default function Library({
       </aside>
 
       {/* ─── Right: Detail View ────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 flex flex-col gap-lg overflow-y-auto">
+      <div className="flex-1 min-w-0 flex flex-col gap-4 overflow-y-auto">
 
         {/* Track info + metadata */}
-        <div className="glass-panel rounded-xl p-lg relative overflow-hidden group border border-white/5 shadow-2xl">
+        <div className="glass-panel rounded-xl p-4 relative overflow-hidden group border border-white/5 shadow-lg">
           <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary/10 blur-[80px] rounded-full pointer-events-none" />
           
-          <div className="relative z-10 flex flex-col md:flex-row gap-lg items-start">
+          <div className="relative z-10 flex flex-col md:flex-row gap-4 items-start">
             
             {/* Mini cassette visual */}
-            <div className="w-full md:w-56 shrink-0 bg-surface-container-high rounded-xl p-3 border border-white/10 shadow-lg">
+            <div className="w-full md:w-48 shrink-0 bg-surface-container-high rounded-xl p-2 border border-white/10 shadow-lg">
               <div className="rounded-lg p-3 flex flex-col justify-between border border-white/5 bg-black/55 relative overflow-hidden min-h-[7rem]">
                 <div className="flex justify-between items-start">
                   <span className="text-[9px] text-secondary font-bold tracking-widest bg-secondary/10 px-1.5 py-0.5 rounded-full">A-SIDE</span>
@@ -266,18 +362,18 @@ export default function Library({
             </div>
 
             {/* Metadata grid */}
-            <div className="flex-1 grid grid-cols-2 gap-3 w-full">
+            <div className="flex-1 grid grid-cols-2 gap-2 w-full">
               {[
                 { icon: Clock, label: 'Duration', value: activeTrack.metadata.durationStr, color: 'text-secondary' },
                 { icon: Music, label: 'Key', value: `${activeTrack.metadata.key} ${activeTrack.metadata.scale}`, color: 'text-primary' },
                 { icon: Gauge, label: 'Tempo', value: `${activeTrack.metadata.tempo} BPM`, color: 'text-primary' },
                 { icon: Sliders, label: 'Complexity', value: activeTrack.metadata.complexity, color: 'text-secondary' },
               ].map((item) => (
-                <div key={item.label} className="bg-white/5 p-3 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
-                  <p className="text-[9px] text-on-surface-variant uppercase flex items-center gap-1 mb-1">
+                <div key={item.label} className="bg-white/5 p-2.5 rounded-lg border border-white/5">
+                  <p className="text-[9px] text-on-surface-variant uppercase flex items-center gap-1 mb-0.5">
                     <item.icon className={`w-3 h-3 ${item.color}`} /> {item.label}
                   </p>
-                  <p className="font-display font-extrabold text-base text-on-surface">
+                  <p className="font-display font-extrabold text-sm text-on-surface">
                     {item.value}
                   </p>
                 </div>
@@ -294,77 +390,13 @@ export default function Library({
           </div>
         </div>
 
-        {/* Export + Share row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-lg">
-          {/* Export */}
-          <div className="glass-panel rounded-xl p-lg flex flex-col gap-3 border border-white/5 shadow-lg">
-            <h3 className="font-display font-semibold text-base text-on-surface">Export</h3>
-            <button
-              onClick={activeTrack?.fileId ? handleDownloadFromServer : handleDownloadMidi}
-              className="flex items-center justify-between bg-gradient-to-r from-primary to-secondary p-4 rounded-xl hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer text-black"
-            >
-              <div>
-                <span className="text-[9px] text-black/70 font-extrabold uppercase block">
-                  {activeTrack?.fileId ? 'Download from server' : 'Download locally'}
-                </span>
-                <span className="font-display font-extrabold text-base">Download .mid</span>
-              </div>
-              <Download className="w-6 h-6" />
-            </button>
-            {activeTrack?.fileId && (
-              <button
-                onClick={handleDownloadFromServer}
-                className="flex items-center gap-3 p-3 rounded-xl border border-white/10 hover:bg-white/5 transition-all cursor-pointer text-left"
-              >
-                <Server className="w-4 h-4 text-secondary" />
-                <div>
-                  <p className="text-xs font-bold text-on-surface">From Server</p>
-                  <p className="text-[9px] text-on-surface-variant">Original backend file</p>
-                </div>
-              </button>
-            )}
-          </div>
-
-          {/* Share */}
-          <div className="glass-panel rounded-xl p-lg border border-white/5 shadow-lg">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-display font-semibold text-base text-on-surface">Share</h3>
-              <button
-                onClick={handleCopyLink}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-high border border-white/10 hover:text-secondary hover:border-secondary transition-all cursor-pointer text-xs"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? 'Copied!' : 'Copy Link'}
-              </button>
-            </div>
-            <div className="flex gap-3">
-              <div className="w-9 h-9 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center cursor-pointer hover:bg-blue-500/25 text-blue-400 transition-colors">
-                <span className="text-xs font-bold">@</span>
-              </div>
-              <div
-                onClick={() => setLiked(!liked)}
-                className={`w-9 h-9 rounded-full border flex items-center justify-center cursor-pointer transition-colors ${
-                  liked
-                    ? 'bg-pink-500/25 border-pink-500 text-pink-400 animate-pulse'
-                    : 'bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20'
-                }`}
-              >
-                <span className="translate-y-[0.5px]">♥</span>
-              </div>
-              <div className="w-9 h-9 rounded-full bg-white/5 border border-white/15 flex items-center justify-center cursor-pointer hover:bg-white/15 text-white transition-colors">
-                <span className="text-xs font-mono font-bold">AI</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Preview player */}
-        <div className="glass-panel rounded-xl p-lg border border-white/5 shadow-lg">
-          <div className="flex items-center justify-between mb-3">
+        <div className="glass-panel rounded-xl p-4 border border-white/5 shadow-lg">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
               <button
                 onClick={togglePreviewPlay}
-                className="w-10 h-10 rounded-full bg-primary text-black flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+                className="w-9 h-9 rounded-full bg-primary text-black flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-transform cursor-pointer"
               >
                 {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
               </button>
@@ -395,10 +427,242 @@ export default function Library({
             })}
           </div>
         </div>
+
+        {/* Export + Share row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Export */}
+          <div className="glass-panel rounded-xl p-4 flex flex-col gap-3 border border-white/5 shadow-lg">
+            <h3 className="font-display font-semibold text-sm text-on-surface">{t("lib.export")}</h3>
+            <button
+              onClick={activeTrack?.fileId ? handleDownloadFromServer : handleDownloadMidi}
+              className="flex items-center justify-between bg-gradient-to-r from-primary to-secondary p-3 rounded-xl hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer text-black"
+            >
+              <div>
+                <span className="text-[9px] text-black/70 font-extrabold uppercase block">
+                  {activeTrack?.fileId ? t("lib.downloadServer") : t("lib.downloadLocal")}
+                </span>
+                <span className="font-display font-extrabold text-sm">{t("lib.download")}</span>
+              </div>
+              <Download className="w-5 h-5" />
+            </button>
+            {activeTrack?.fileId && (
+              <button
+                onClick={handleDownloadFromServer}
+                className="flex items-center gap-3 p-2.5 rounded-xl border border-white/10 hover:bg-white/5 transition-all cursor-pointer text-left"
+              >
+                <Server className="w-4 h-4 text-secondary" />
+                <div>
+                  <p className="text-xs font-bold text-on-surface">{t("lib.fromServer")}</p>
+                  <p className="text-[9px] text-on-surface-variant">{t("lib.fromServerDesc")}</p>
+                </div>
+              </button>
+            )}
+          </div>
+
+          {/* Share */}
+          <div className="glass-panel rounded-xl p-4 border border-white/5 shadow-lg">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-display font-semibold text-sm text-on-surface">{t("lib.share")}</h3>
+              <button
+                onClick={handleCopyLink}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-high border border-white/10 hover:text-secondary hover:border-secondary transition-all cursor-pointer text-xs"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? 'Copied!' : 'Copy Link'}
+              </button>
+            </div>
+            <div className="flex gap-3">
+              <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center cursor-pointer hover:bg-blue-500/25 text-blue-400 transition-colors">
+                <span className="text-xs font-bold">@</span>
+              </div>
+              <div
+                onClick={() => setLiked(!liked)}
+                className={`w-8 h-8 rounded-full border flex items-center justify-center cursor-pointer transition-colors ${
+                  liked
+                    ? 'bg-pink-500/25 border-pink-500 text-pink-400 animate-pulse'
+                    : 'bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20'
+                }`}
+              >
+                <span className="translate-y-[0.5px]">♥</span>
+              </div>
+              <div className="w-8 h-8 rounded-full bg-white/5 border border-white/15 flex items-center justify-center cursor-pointer hover:bg-white/15 text-white transition-colors">
+                <span className="text-xs font-mono font-bold">AI</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── Feature: Chord Detection ────────────────────────────── */}
+        <div className="glass-panel rounded-xl border border-white/5 shadow-lg overflow-hidden">
+          <button
+            onClick={runChordDetection}
+            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-all cursor-pointer text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary">
+                <Guitar className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Chord Detection</p>
+                <p className="text-[9px] text-on-surface-variant">Detect chords from MIDI notes</p>
+              </div>
+            </div>
+            {loadingChords ? (
+              <RefreshCw className="w-4 h-4 text-on-surface-variant animate-spin" />
+            ) : showChords ? (
+              <ChevronDown className="w-4 h-4 text-on-surface-variant" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-on-surface-variant" />
+            )}
+          </button>
+
+          {showChords && chords.length > 0 && (
+            <div className="px-4 pb-4">
+              <div className="flex flex-wrap gap-1.5">
+                {chords.map((c, i) => (
+                  <div
+                    key={i}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold border ${
+                      c.confidence > 0.5
+                        ? "bg-primary/10 border-primary/30 text-primary"
+                        : "bg-white/5 border-white/10 text-on-surface-variant"
+                    }`}
+                    title={`Bar ${c.bar}: ${c.notes.join(", ")}`}
+                  >
+                    {c.name}
+                    <span className="text-[9px] opacity-50 ml-1">bar {c.bar}</span>
+                  </div>
+                ))}
+              </div>
+              {chords.length === 0 && (
+                <p className="text-xs text-on-surface-variant">No chord detected in this track.</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ─── Feature: AI Regenerate ──────────────────────────────── */}
+        <div className="glass-panel rounded-xl p-4 border border-white/5 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                <WandSparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">AI Regenerate</p>
+                <p className="text-[9px] text-on-surface-variant">Create a variation of this track</p>
+              </div>
+            </div>
+            <button
+              onClick={handleRegenerate}
+              disabled={regenerating}
+              className="bg-gradient-to-r from-primary to-secondary text-black text-xs font-bold px-4 py-2 rounded-xl hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              {regenerating ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Generating...
+                </>
+              ) : (
+                <>
+                  <WandSparkles className="w-3.5 h-3.5" /> Regenerate
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* ─── Feature: DNA Analysis ───────────────────────────────── */}
+        <div className="glass-panel rounded-xl border border-white/5 shadow-lg overflow-hidden">
+          <button
+            onClick={runDNAAnalysis}
+            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-all cursor-pointer text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-tertiary/10 flex items-center justify-center text-tertiary">
+                <Dna className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">DNA Analysis</p>
+                <p className="text-[9px] text-on-surface-variant">MusicDNA structure & quality</p>
+              </div>
+            </div>
+            {loadingDna ? (
+              <RefreshCw className="w-4 h-4 text-on-surface-variant animate-spin" />
+            ) : showDna ? (
+              <ChevronDown className="w-4 h-4 text-on-surface-variant" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-on-surface-variant" />
+            )}
+          </button>
+
+          {showDna && dnaResult && (
+            <div className="px-4 pb-4">
+              {/* Quality score */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] text-on-surface-variant uppercase font-semibold">Quality:</span>
+                <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 rounded-full transition-all"
+                    style={{ width: `${Math.round((dnaResult.quality || 0) * 100)}%` }}
+                  />
+                </div>
+                <span className="text-xs font-mono text-secondary font-bold">
+                  {Math.round((dnaResult.quality || 0) * 100)}%
+                </span>
+              </div>
+
+              {/* DNA dimensions */}
+              {dnaResult.dna && (
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: "Structure", key: "structure", color: "text-primary" },
+                    { label: "Harmony", key: "harmony", color: "text-secondary" },
+                    { label: "Motif", key: "motif", color: "text-tertiary" },
+                    { label: "Rhythm", key: "rhythm", color: "text-primary" },
+                    { label: "Texture", key: "texture", color: "text-secondary" },
+                    { label: "Dynamics", key: "dynamics", color: "text-tertiary" },
+                    { label: "Emotion", key: "emotion", color: "text-primary" },
+                  ].map((dim) => {
+                    const val = dnaResult.dna[dim.key];
+                    if (!val) return null;
+                    // Find a numeric sub-field
+                    const numVal = typeof val === "object"
+                      ? Object.values(val).find(v => typeof v === "number") as number | undefined
+                      : undefined;
+                    return (
+                      <div key={dim.key} className="bg-white/5 rounded-lg p-2.5">
+                        <p className={`text-[9px] uppercase font-semibold ${dim.color}`}>{dim.label}</p>
+                        {numVal !== undefined && (
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-current rounded-full"
+                                style={{ width: `${Math.min(100, Math.round(numVal * 100))}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-mono text-on-surface-variant">
+                              {Math.round(numVal * 100)}%
+                            </span>
+                          </div>
+                        )}
+                        {numVal === undefined && (
+                          <p className="text-[10px] font-mono text-on-surface-variant mt-0.5 truncate">
+                            {JSON.stringify(val).slice(0, 30)}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
       </div>
 
-      {/* ─── Buy Me a Coffee ──────────────────────────────────────── */}
-      <BuyMeCoffee />
+      {/* ─── Buy Me a Coffee (hidden) ────────────────────────────── */}
+      {/* <BuyMeCoffee /> */}
 
     </div>
   );

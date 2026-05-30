@@ -226,7 +226,7 @@ export async function downloadFile(fileId: string): Promise<Blob> {
 // ─── DNA ────────────────────────────────────────────────────────────
 
 export interface DNAExtractRequest {
-  events_by_track: Record<string, Array<{ pitch: number; start: number; end: number; velocity: number }>>;
+  events_by_track: Record<string, Array<{ pitch: number; start_beat: number; duration_beat: number; velocity: number }>>;
   total_bars: number;
   key: string;
 }

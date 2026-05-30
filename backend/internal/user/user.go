@@ -44,8 +44,9 @@ var migrations = []string{
 	`CREATE TABLE IF NOT EXISTS users (
 		id          INTEGER PRIMARY KEY AUTOINCREMENT,
 		username    TEXT NOT NULL UNIQUE,
-		password    TEXT NOT NULL,  -- salted SHA-256 hash
+		password    TEXT NOT NULL,
 		salt        TEXT NOT NULL,
+		creates     INTEGER NOT NULL DEFAULT 5,  -- free generations remaining
 		created_at  TEXT NOT NULL DEFAULT (datetime('now')),
 		last_login  TEXT
 	)`,
@@ -235,6 +236,35 @@ func SavePrefs(userID int64, p *Prefs) error {
 		userID, p.Style, p.KeyName, p.BPM, p.Bars, p.FlatVel, p.Chaos, p.Progression, p.Mode, loop, pent,
 	)
 	return err
+}
+
+// ─── Generations / Credits ──────────────────────────────────────────
+
+// CheckCredits returns how many free generations a user has left.
+func CheckCredits(userID int64) int {
+	var c int
+	err := DB.QueryRow("SELECT creates FROM users WHERE id = ?", userID).Scan(&c)
+	if err != nil {
+		return 0
+	}
+	return c
+}
+
+// ConsumeCredit decrements the remaining free generations by 1.
+// Returns (remaining, canProceed) where canProceed is false if already 0.
+func ConsumeCredit(userID int64) (int, bool) {
+	remaining := CheckCredits(userID)
+	if remaining <= 0 {
+		// Allow at most 1 extra overage; check if has any credits or needs purchase.
+		return 0, false
+	}
+	DB.Exec("UPDATE users SET creates = creates - 1 WHERE id = ? AND creates > 0", userID)
+	return remaining - 1, true
+}
+
+// AddCredits adds paid generations to a user's account.
+func AddCredits(userID int64, amount int) {
+	DB.Exec("UPDATE users SET creates = creates + ? WHERE id = ?", amount, userID)
 }
 
 // ─── Generation History ─────────────────────────────────────────────

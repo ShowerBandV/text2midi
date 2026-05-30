@@ -12,6 +12,7 @@ import {
   Volume2
 } from "lucide-react";
 import * as api from "./utils/api";
+import { useT } from "./i18n";
 
 // Pre-defined initial template tracks to make the application fully functional out of the box!
 const INITIAL_TRACKS: MidiTrack[] = [
@@ -91,10 +92,215 @@ const INITIAL_TRACKS: MidiTrack[] = [
       { id: "strings-6", pitch: "G4", time: 4.5, duration: 3.5, velocity: 75 },
       { id: "strings-7", pitch: "D4", time: 8.0, duration: 6.0, velocity: 85 }
     ]
+  },
+  {
+    id: "track-lofi",
+    instrument: "piano",
+    globalVelocity: 70,
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+    metadata: {
+      title: "Chill_Lofi_Study_Beats",
+      seed: 4419023,
+      tempo: 85,
+      key: "A",
+      scale: "Minor",
+      complexity: "Low",
+      genre: "Lo-fi Hip Hop",
+      durationStr: "02:22"
+    },
+    notes: []
+  },
+  {
+    id: "track-electro",
+    instrument: "synth",
+    globalVelocity: 100,
+    createdAt: new Date(Date.now() - 172800000).toISOString(),
+    metadata: {
+      title: "Electro_Surge_Bass",
+      seed: 5512341,
+      tempo: 140,
+      key: "F",
+      scale: "Minor",
+      complexity: "High",
+      genre: "Electronic Dance",
+      durationStr: "04:08"
+    },
+    notes: []
+  },
+  {
+    id: "track-ambient",
+    instrument: "strings",
+    globalVelocity: 65,
+    createdAt: new Date(Date.now() - 259200000).toISOString(),
+    metadata: {
+      title: "Deep_Ambient_Pad",
+      seed: 6678901,
+      tempo: 70,
+      key: "D",
+      scale: "Major",
+      complexity: "Medium",
+      genre: "Ambient Drone",
+      durationStr: "06:30"
+    },
+    notes: []
+  },
+  {
+    id: "track-funk",
+    instrument: "piano",
+    globalVelocity: 88,
+    createdAt: new Date(Date.now() - 345600000).toISOString(),
+    metadata: {
+      title: "Funky_Soul_Groove",
+      seed: 7723456,
+      tempo: 110,
+      key: "Eb",
+      scale: "Major",
+      complexity: "Medium",
+      genre: "Funk Soul",
+      durationStr: "03:55"
+    },
+    notes: []
+  },
+  {
+    id: "track-orchestral",
+    instrument: "strings",
+    globalVelocity: 92,
+    createdAt: new Date(Date.now() - 432000000).toISOString(),
+    metadata: {
+      title: "Epic_Orchestral_Rise",
+      seed: 8834567,
+      tempo: 130,
+      key: "C",
+      scale: "Minor",
+      complexity: "High",
+      genre: "Orchestral",
+      durationStr: "05:12"
+    },
+    notes: []
+  },
+  {
+    id: "track-house",
+    instrument: "synth",
+    globalVelocity: 98,
+    createdAt: new Date(Date.now() - 518400000).toISOString(),
+    metadata: {
+      title: "Deep_House_Morning",
+      seed: 9945678,
+      tempo: 124,
+      key: "G",
+      scale: "Major",
+      complexity: "Medium",
+      genre: "Deep House",
+      durationStr: "05:45"
+    },
+    notes: []
+  },
+  {
+    id: "track-blues",
+    instrument: "piano",
+    globalVelocity: 78,
+    createdAt: new Date(Date.now() - 604800000).toISOString(),
+    metadata: {
+      title: "Midnight_Blues_Impro",
+      seed: 1012345,
+      tempo: 95,
+      key: "A",
+      scale: "Major",
+      complexity: "Medium",
+      genre: "Blues",
+      durationStr: "03:38"
+    },
+    notes: []
+  },
+  {
+    id: "track-trap",
+    instrument: "synth",
+    globalVelocity: 100,
+    createdAt: new Date(Date.now() - 691200000).toISOString(),
+    metadata: {
+      title: "Dark_Trap_808",
+      seed: 1123456,
+      tempo: 150,
+      key: "D",
+      scale: "Minor",
+      complexity: "High",
+      genre: "Trap",
+      durationStr: "03:20"
+    },
+    notes: []
+  },
+  {
+    id: "track-acoustic",
+    instrument: "piano",
+    globalVelocity: 72,
+    createdAt: new Date(Date.now() - 777600000).toISOString(),
+    metadata: {
+      title: "Acoustic_Ballad_Rev",
+      seed: 1234567,
+      tempo: 78,
+      key: "C",
+      scale: "Major",
+      complexity: "Low",
+      genre: "Acoustic Ballad",
+      durationStr: "04:02"
+    },
+    notes: []
+  },
+  {
+    id: "track-synthwave",
+    instrument: "synth",
+    globalVelocity: 90,
+    createdAt: new Date(Date.now() - 864000000).toISOString(),
+    metadata: {
+      title: "Retro_Synthwave_84",
+      seed: 1345678,
+      tempo: 128,
+      key: "B",
+      scale: "Minor",
+      complexity: "Medium",
+      genre: "Synthwave",
+      durationStr: "04:30"
+    },
+    notes: []
+  },
+  {
+    id: "track-jazz2",
+    instrument: "piano",
+    globalVelocity: 82,
+    createdAt: new Date(Date.now() - 950400000).toISOString(),
+    metadata: {
+      title: "Smoky_Jazz_Club",
+      seed: 1456789,
+      tempo: 105,
+      key: "Ab",
+      scale: "Major",
+      complexity: "High",
+      genre: "Jazz Fusion",
+      durationStr: "05:20"
+    },
+    notes: []
+  },
+  {
+    id: "track-cinematic2",
+    instrument: "strings",
+    globalVelocity: 85,
+    createdAt: new Date(Date.now() - 1036800000).toISOString(),
+    metadata: {
+      title: "Cinematic_Climax",
+      seed: 1567890,
+      tempo: 100,
+      key: "E",
+      scale: "Minor",
+      complexity: "High",
+      genre: "Cinematic",
+      durationStr: "04:45"
+    },
+    notes: []
   }
 ];
 
 export default function App() {
+  const t = useT();
   const [activeTab, setActiveTab] = useState<"generate" | "library">("generate");
   const [prompt, setPrompt] = useState("");
 
@@ -200,12 +406,12 @@ export default function App() {
   const [generationStep, setGenerationStep] = useState(0);
 
   const loadingMessages = [
-    "Analyzing prompt semantics...",
-    "Querying MidiMind musical brain...",
-    "Selecting chord intervals...",
-    "Generating beat triggers...",
-    "Polishing velocity expressions...",
-    "Synthesizing low-latency MIDI file..."
+    t("load.analyzing"),
+    t("load.querying"),
+    t("load.chords"),
+    t("load.beats"),
+    t("load.velocity"),
+    t("load.synthesizing")
   ];
 
   // Map updates of notes context directly in active track object
@@ -235,6 +441,9 @@ export default function App() {
   }, [isGenerating]);
 
 
+  // ─── Auth modal control ─────────────────────────────────────────
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
   // Preset prompts clicking handles
   const handleApplyPresetGroup = (pText: string, tBpm: number, rKey: string, sScale: string) => {
     setPrompt(pText);
@@ -245,6 +454,11 @@ export default function App() {
 
   // Triggers API Call to backend Full-stack server
   const handleGenerateMidi = async () => {
+    // Require login
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
     setIsGenerating(true);
     try {
       // Use dynamic styles from backend info if available
@@ -304,6 +518,8 @@ export default function App() {
         onLogin={handleLogin}
         onRegister={handleRegister}
         onLogout={handleLogout}
+        showAuthModal={showAuthModal}
+        setShowAuthModal={setShowAuthModal}
       />
 
       {/* Main Container screen sections */}
@@ -336,10 +552,10 @@ export default function App() {
               {/* Giant Display header and subtitle */}
               <div className="flex flex-col items-center text-center gap-lg mt-8 select-none">
                 <h1 className="font-display font-extrabold text-display-lg tracking-tight text-white leading-tight">
-                  Turn Your Words into <span className="text-primary italic">MIDI Magic</span>
+                  Turn Words Into <span className="text-primary italic">Music</span>
                 </h1>
                 <p className="text-on-surface-variant text-sm md:text-base leading-relaxed font-medium">
-                  The world's first professional AI engine designed to translate complex musical prompts into production-ready MIDI sequences. Orchestrate your imagination.
+                  Describe the sound you hear in your head — a moody synth arpeggio, a jazz piano ballad, a cinematic orchestral swell — and our engine crafts a production-ready MIDI file in seconds.
                 </p>
               </div>
 
@@ -350,7 +566,7 @@ export default function App() {
                     <textarea
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
-                      placeholder="A melancholic jazz piano solo in C minor..."
+                      placeholder={t("gen.placeholder")}
                       className="w-full h-40 bg-surface-container-low border border-white/5 rounded-xl p-lg text-sm md:text-md text-white font-medium focus:ring-1 focus:ring-primary focus:outline-none transition-all resize-none placeholder:opacity-30"
                     />
                     
@@ -368,19 +584,19 @@ export default function App() {
                         onClick={() => handleApplyPresetGroup("A moody neon arpeggio synth line in C minor", 128, "C", "Minor")}
                         className="bg-surface-container-highest hover:bg-white/10 px-md py-1 rounded-full text-[10px] font-mono font-bold text-primary flex items-center gap-1 cursor-pointer transition-colors"
                       >
-                        <Sparkles className="w-3 h-3" /> CYBERPUNK
+                        <Sparkles className="w-3 h-3" /> {t("gen.presetCyberpunk")}
                       </button>
                       <button
                         onClick={() => handleApplyPresetGroup("Smooth acoustic jazz piano progression Eb Minor", 120, "Eb", "Minor")}
                         className="bg-surface-container-highest hover:bg-white/10 px-md py-1 rounded-full text-[10px] font-mono font-bold text-secondary flex items-center gap-1 cursor-pointer transition-colors"
                       >
-                        <Music className="w-3 h-3" /> JAZZ CHORDS
+                        <Music className="w-3 h-3" /> {t("gen.presetJazz")}
                       </button>
                       <button
                         onClick={() => handleApplyPresetGroup("Elevated epic violin string pads swell", 90, "G", "Major")}
                         className="bg-surface-container-highest hover:bg-white/10 px-md py-1 rounded-full text-[10px] font-mono font-bold text-tertiary flex items-center gap-1 cursor-pointer transition-colors"
                       >
-                        <Volume2 className="w-3 h-3" /> STRING PAD
+                        <Volume2 className="w-3 h-3" /> {t("gen.presetString")}
                       </button>
                     </div>
 
@@ -388,7 +604,7 @@ export default function App() {
                       onClick={handleGenerateMidi}
                       className="w-full md:w-auto bg-gradient-to-r from-primary-container to-secondary-container hover:brightness-110 active:scale-95 text-on-primary-container px-xl py-md rounded-xl font-bold font-display flex items-center justify-center gap-2 cursor-pointer shadow-xl transition-all"
                     >
-                      Generate MIDI
+                      {t("gen.generate")}
                       <Sparkles className="w-5 h-5" />
                     </button>
                   </div>
@@ -400,12 +616,12 @@ export default function App() {
                 <div className="flex flex-wrap items-center gap-3 text-[10px] text-on-surface-variant font-mono justify-center">
                   <span className="flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
-                    Styles: {info.styles?.join(', ') || 'N/A'}
+                    {t("info.styles")}: {info.styles?.join(', ') || 'N/A'}
                   </span>
                   <span className="opacity-30">|</span>
                   <span className="flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    Tiers: {Object.entries(info.tiers || {}).map(([t, b]) => `${t} (${b} bars)`).join(' · ')}
+                    {t("info.tiers")}: {Object.entries(info.tiers || {}).map(([tier, b]) => `${tier} (${b} ${t("info.bars")})`).join(' · ')}
                   </span>
                 </div>
               )}
@@ -420,10 +636,10 @@ export default function App() {
                       <Brain className="w-6 h-6" />
                     </div>
                     <h3 className="font-display font-extrabold text-headline-lg-mobile md:text-headline-lg text-white mb-sm">
-                      Instant AI Composition
+                      {t("feat.engine")}
                     </h3>
                     <p className="text-on-surface-variant text-xs md:text-sm leading-relaxed">
-                      Our neural network is trained on over 2 million hours of musical performance, capturing the nuances of phrasing, velocity, and timing that standard generators miss.
+                      {t("feat.engineDesc")}
                     </p>
                   </div>
                   <div className="absolute right-[-20px] bottom-[-20px] opacity-[0.03] group-hover:opacity-[0.07] transition-all transform group-hover:scale-105 duration-700 pointer-events-none">
@@ -437,10 +653,10 @@ export default function App() {
                     <Sliders className="w-6 h-6" />
                   </div>
                   <h3 className="font-display font-extrabold text-headline-lg-mobile md:text-headline-lg text-white mb-sm text-left">
-                    Customizable
+                    {t("feat.llm")}
                   </h3>
                   <p className="text-on-surface-variant text-xs md:text-sm text-left leading-relaxed">
-                    Fine-tune every generated note. Edit scales, shift octaves, and adjust velocities with our high-performance web-based editor.
+                    {t("feat.llmDesc")}
                   </p>
                 </div>
 
@@ -450,10 +666,10 @@ export default function App() {
                     <Layers className="w-6 h-6" />
                   </div>
                   <h3 className="font-display font-extrabold text-headline-lg-mobile md:text-headline-lg text-white mb-sm text-left">
-                    Multi-Track Export
+                    {t("feat.arrangement")}
                   </h3>
                   <p className="text-on-surface-variant text-xs md:text-sm text-left leading-relaxed">
-                    Generate complex arrangements with up to 16 tracks. Export directly to .MID for seamless integration into Ableton, Logic, or FL Studio.
+                    {t("feat.arrangementDesc")}
                   </p>
                 </div>
 
@@ -467,10 +683,10 @@ export default function App() {
                   />
                   <div className="absolute inset-0 bg-gradient-to-r from-surface-container-lowest via-surface-container-lowest/80 to-transparent p-xl flex flex-col justify-end text-left">
                     <h3 className="font-display font-extrabold text-headline-lg-mobile md:text-headline-lg text-white mb-sm">
-                      Professional Grade Engine
+                      {t("feat.realtime")}
                     </h3>
                     <p className="text-on-surface-variant text-xs md:text-sm leading-relaxed">
-                      Built for producers who demand precision. No generic patterns—just pure, generative inspiration mapped to your specific DAW requirements.
+                      {t("feat.realtimeDesc")}
                     </p>
                   </div>
                 </div>
@@ -498,7 +714,7 @@ export default function App() {
                   Elevate Your Sound
                 </h2>
                 <p className="text-on-surface-variant text-xs mt-3">
-                  AI-powered MIDI generation — turn your ideas into music.
+                  {t("footer.tagline")}
                 </p>
               </section>
 
