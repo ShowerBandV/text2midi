@@ -65,12 +65,12 @@ func GenerateLeadMotifWithChords(scale []int, chords []string, totalBars int) []
 				}
 				pitch = chordRoot + offsets[rng.Intn(3)]
 			} else {
-				// Weak beat: relative scale interval from root.
+				// Weak beat: relative interval from chord root.
 				intervals := []int{0, 2, 4, 5, 7, 9, 11}
 				if chordRoot > 0 {
 					pitch = chordRoot + intervals[rng.Intn(7)]
 				} else {
-					pitch = scale[rng.Intn(len(scale))]
+					pitch = intervals[rng.Intn(7)] // no chord: just use interval
 				}
 			}
 
