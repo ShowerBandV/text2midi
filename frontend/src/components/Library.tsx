@@ -4,7 +4,6 @@ import { generateMidiFileBlobUrl } from "../utils/audio";
 import { Player } from "midi-player-js";
 import {
   Download,
-  Share2,
   Copy,
   FolderHeart,
   FileMusic,
@@ -320,21 +319,13 @@ export default function Library({
           <div className="flex items-center justify-between mb-sm">
             <span className="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Share creation</span>
             
-            <div className="flex gap-2">
-              <button 
-                onClick={handleCopyLink}
-                className="w-9 h-9 rounded-lg bg-surface-container-high border border-white/10 flex items-center justify-center hover:text-secondary hover:border-secondary transition-all active:scale-90 cursor-pointer"
-                title="Copy share link"
-              >
-                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-              </button>
-              <button 
-                className="w-9 h-9 rounded-lg bg-surface-container-high border border-white/10 flex items-center justify-center hover:text-secondary hover:border-secondary transition-all active:scale-90 cursor-pointer"
-                title="Share overlay"
-              >
-                <Share2 className="w-4 h-4" />
-              </button>
-            </div>
+            <button 
+              onClick={handleCopyLink}
+              className="flex items-center gap-2 px-md py-sm rounded-lg bg-surface-container-high border border-white/10 hover:text-secondary hover:border-secondary transition-all active:scale-95 cursor-pointer text-sm"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              {copied ? 'Copied!' : 'Copy Link'}
+            </button>
           </div>
 
           <div className="flex gap-md overflow-x-auto pb-1 mt-1">
