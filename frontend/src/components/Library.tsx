@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { MidiTrack, InstrumentType } from "../types";
-import { generateMidiFileBlobUrl, playNote } from "../utils/audio";
+import { generateMidiFileBlobUrl } from "../utils/audio";
+import { Player } from "midi-player-js";
 import {
   Download,
   Share2,
