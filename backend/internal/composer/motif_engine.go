@@ -354,25 +354,71 @@ func GenerateLeadMetal(keyRoot string, totalBars int, energy float64) []schema.N
 		sec := songSection(bar, totalBars)
 
 		switch sec {
-		// ── INTRO: Riff theme — establish the motif ──────────
+		// ── INTRO: Metal riff — low chugs + melodic leap + syncopation ──
 		case "intro":
-			hook := []int{scale[0] + 12*3, scale[2] + 12*3, scale[4] + 12*3, scale[1] + 12*4}
+			root := scale[0] + 12*3 // E4 area
+			// Riff pattern: open-chug-chug-leap-chug-leap-chug-rest
+			// 0---0-0-3---0-5-0-6--- (tab-style thinking)
+			type riffNote struct {
+				beat    float64
+				pitch   int
+				dur     float64
+				accent  bool
+				palmMute bool
+			}
+			var pattern []riffNote
 			if bar%2 == 0 {
-				for i, p := range hook {
-					events = append(events, schema.NoteEvent{
-						Type: "note", Pitch: p,
-						StartBeat: base + float64(i)*0.5, DurationBeat: 0.15,
-						Velocity: 110,
-					})
+				// Statement: the main riff.
+				pattern = []riffNote{
+					{0.0, root, 0.15, true, false},       // OPEN — let ring
+					{0.5, root, 0.08, false, true},       // chug
+					{0.75, root, 0.08, false, true},      // chug  
+					{1.0, root + 3, 0.12, true, false},   // MELODIC LEAP
+					{1.5, root, 0.08, false, true},       // chug
+					{2.0, root + 5, 0.12, true, false},   // MELODIC LEAP
+					{2.5, root, 0.08, false, true},       // chug
+					{3.0, root + 7, 0.2, true, false},    // HIGH — ring out
+					// bar 2: variation
+					{4.0, root + 3, 0.12, true, false},
+					{4.5, root, 0.08, false, true},
+					{5.0, root + 5, 0.12, true, false},
+					{5.5, root, 0.08, false, true},
+					{6.0, root + 3, 0.12, true, false},
+					{6.5, root, 0.06, false, true},
+					{6.75, root + 2, 0.06, false, false},  // quick chromatic
+					{7.0, root + 3, 0.2, true, false},
 				}
 			} else {
-				for i, p := range hook {
-					events = append(events, schema.NoteEvent{
-						Type: "note", Pitch: p + 5,
-						StartBeat: base + float64(i)*0.5, DurationBeat: 0.15,
-						Velocity: 105,
-					})
+				// Variation: transposed up a 4th.
+				transpose := root + 5
+				pattern = []riffNote{
+					{0.0, transpose, 0.15, true, false},
+					{0.5, transpose, 0.08, false, true},
+					{0.75, transpose, 0.08, false, true},
+					{1.0, transpose + 3, 0.12, true, false},
+					{1.5, transpose, 0.08, false, true},
+					{2.0, transpose + 5, 0.12, true, false},
+					{2.5, transpose, 0.08, false, true},
+					{3.0, transpose + 7, 0.2, true, false},
 				}
+			}
+			for _, n := range pattern {
+				dur := n.dur
+				if n.palmMute {
+					dur = 0.04 // tighter for palm mute
+				}
+				vel := 100
+				if n.accent {
+					vel = 115
+				}
+				if n.palmMute {
+					vel = 85
+				}
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: n.pitch,
+					StartBeat: base + n.beat, DurationBeat: dur,
+					Velocity: vel,
+				})
 			}
 
 		// ── VERSE: Arpeggio or rest — support, don't lead ────
