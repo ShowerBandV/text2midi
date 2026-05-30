@@ -37,6 +37,7 @@ func main() {
 	progression := flag.String("progression", "", "Chord progression: warm/dark/hopeful/epic/tense/bright (overrides style default)")
 	mode := flag.String("mode", "", "Scale mode: dorian/phrygian/lydian/mixolydian (overrides style default)")
 	sf2 := flag.String("sf2", "", "SF2 profile path for instrument key range constraints")
+	chaos := flag.Float64("chaos", 0.0, "Chaos factor 0-1: probability of breaking rules for happy accidents (0=none, 0.05=subtle)")
 	flag.Parse()
 
 	if *prompt == "" && !*local {
@@ -50,7 +51,7 @@ func main() {
 	// Local mode: skip LLM, use rule-based generation directly.
 	if *local {
 		composer.SetGlobalSeed(*seed)
-		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate, *loopable, *progression, *mode, *sf2)
+		runLocal(*prompt, *styleName, *bpm, *bars, *key, *out, *dryRun, *pentatonic, *flatVel, *validate, *loopable, *progression, *mode, *sf2, *chaos)
 		return
 	}
 	composer.SetGlobalSeed(*seed)
@@ -666,7 +667,7 @@ func toFloat(v any) float64 {
 
 // runLocal generates MIDI entirely via Go rule-based engines, no LLM.
 // Designed for offline use or quick iteration.
-func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int, runValidate bool, loopable bool, progression string, mode string, sf2Path string) {
+func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun bool, pentatonic bool, flatVel int, runValidate bool, loopable bool, progression string, mode string, sf2Path string, chaos float64) {
 	fmt.Println("[Local mode] Generating without LLM...")
 
 	// ── Parse key ────────────────────────────────────────────────
@@ -825,6 +826,15 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 	grammar := composer.NewMelodyGrammar(keyRoot, keyMode)
 	evMap["lead"] = grammar.ApplyAll(evMap["lead"], bars)
 	fmt.Printf("  Lead (grammar): %d events\n", len(evMap["lead"]))
+
+	// ── Chaos injection (after melody grammar, before MIDI) ─────
+	if chaos > 0 {
+		composer.InjectChaos(evMap["lead"], chaos)
+		if evMap["chords"] != nil {
+			composer.InjectChaos(evMap["chords"], chaos*0.5)
+		}
+		fmt.Printf("  [Chaos] injected at %.0f%%\n", chaos*100)
+	}
 
 	// ── Build MIDI IR ────────────────────────────────────────────
 	// Track layout is style-driven: punk uses 4-piece, emo uses full ensemble, etc.
