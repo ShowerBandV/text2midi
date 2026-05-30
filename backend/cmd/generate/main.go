@@ -299,6 +299,7 @@ func main() {
 
 	wg.Wait()
 	fmt.Printf("  Generated: %d tracks (LLM agents, parallel)\n", taskCount)
+	saveStage(projectDir, "04_track_events.json", evMap)
 
 	// --- Orchestrator: add dynamics ---
 	agent.OrchestratorAgent(evMap, plan.TotalBars)
@@ -950,19 +951,19 @@ func styleProfile(style string) (darkness, energy, rhythmic, tension float64, de
 	case strings.Contains(s, "victory") || strings.Contains(s, "fanfare") || strings.Contains(s, "triumph"):
 		return 0.08, 0.82, 0.60, 0.10, 130, 24, "victory" // ~0:44 at 130bpm
 	case strings.Contains(s, "emo") || strings.Contains(s, "sad") || strings.Contains(s, "melancholy"):
-		return 0.75, 0.32, 0.22, 0.52, 72, 24, "emo"
+		return 0.75, 0.32, 0.22, 0.52, 72, 36, "emo" // ~2:00 at 72bpm
 	case strings.Contains(s, "trap") || strings.Contains(s, "hip"):
-		return 0.55, 0.55, 0.65, 0.40, 140, 16, "trap"
+		return 0.55, 0.55, 0.65, 0.40, 140, 70, "trap" // ~2:00 at 140bpm
 	case strings.Contains(s, "metal") || strings.Contains(s, "heavy"):
 		return 0.80, 0.85, 0.55, 0.65, 160, 72, "metal" // 72 bars ≈ 1:48 at 160bpm
 	case strings.Contains(s, "rock"):
-		return 0.45, 0.70, 0.35, 0.40, 130, 24, "rock"
+		return 0.45, 0.70, 0.35, 0.40, 130, 65, "rock" // ~2:00 at 130bpm
 	case strings.Contains(s, "pop"):
 		return 0.25, 0.60, 0.35, 0.25, 110, 64, "pop" // ~2:19 at 110bpm
 	case strings.Contains(s, "punk"):
-		return 0.35, 0.78, 0.50, 0.35, 170, 24, "punk"
+		return 0.35, 0.78, 0.50, 0.35, 170, 85, "punk" // ~2:00 at 170bpm
 	case strings.Contains(s, "ambient") || strings.Contains(s, "atmo"):
-		return 0.30, 0.18, 0.10, 0.15, 60, 16, "ambient"
+		return 0.30, 0.18, 0.10, 0.15, 60, 30, "ambient" // ~2:00 at 60bpm
 	default: // rpg / casual / game
 		return 0.20, 0.45, 0.30, 0.15, 100, 48, "rpg" // ~1:55 at 100bpm
 	}
