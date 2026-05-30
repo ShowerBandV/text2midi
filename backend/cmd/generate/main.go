@@ -805,7 +805,7 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 			if chaos > 0.03 {
 				// With chaos, motif-based melody shines.
 				scale := composer.GetScaleDegrees(keyRoot, leadKeyMode)
-				l = composer.GenerateLeadMotif(scale, bars, energy)
+				l = composer.GenerateLeadMotifWithChords(scale, chords, bars)
 			} else {
 				l = composer.GeneratePianoLegend(keyRoot, leadKeyMode, bars, chords)
 			}
