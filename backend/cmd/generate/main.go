@@ -810,8 +810,9 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 				l = composer.GeneratePianoLegend(keyRoot, leadKeyMode, bars, chords)
 			}
 		default:
-			// emo, trap, ambient, etc. — use sectioned lead with their scale.
-			l = composer.GenerateLeadSectioned(composer.GetScaleDegrees(keyRoot, leadKeyMode), bars, energy)
+			// emo, trap, ambient, etc. — hook-based with identical intro+outro recall.
+			scale := composer.GetScaleDegrees(keyRoot, leadKeyMode)
+			l = composer.GenerateLeadWithHook(scale, chords, bars)
 		}
 		evMu.Lock()
 		evMap["lead"] = l

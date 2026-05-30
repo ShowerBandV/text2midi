@@ -11,6 +11,7 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
+    "generaluser": "^1.47.1",
     "lucide-react": "^0.546.0",
     "midi-player-js": "^2.0.17",
     "motion": "^12.23.24",
