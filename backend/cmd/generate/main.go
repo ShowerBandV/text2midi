@@ -464,6 +464,7 @@ func main() {
 	// ── Orchestration + Ending ─────────────────────────────────
 	applyOrchestrationCurve(evMap, plan.TotalBars, "rpg")
 	composer.ApplyEnding(evMap, plan.TotalBars)
+	composer.ApplyPianoPedal(evMap, plan.TotalBars)
 
 	midiIR := schema.MidiIR{
 		Meta: schema.Meta{
@@ -920,6 +921,7 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 
 	// ── Song ending: ritardando + final chord hold ──────────
 	composer.ApplyEnding(evMap, bars)
+	composer.ApplyPianoPedal(evMap, bars)
 
 	// ── SF2 profile loading ───────────────────────────────────
 	var sf2Profile *musicdna.SF2Profile

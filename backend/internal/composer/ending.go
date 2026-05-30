@@ -6,6 +6,34 @@ import (
 	"github.com/ShowerBandV/text2midi/internal/schema"
 )
 
+// ApplyPianoPedal adds CC64 sustain pedal events at chord changes for piano tracks.
+func ApplyPianoPedal(evMap map[string][]schema.NoteEvent, totalBars int) {
+	for key, evs := range evMap {
+		// Only apply to piano/lead tracks.
+		if key != "lead" && key != "chords" {
+			continue
+		}
+		var pedalEvents []schema.NoteEvent
+		for bar := 0; bar < totalBars; bar++ {
+			base := float64(bar) * 4.0
+			// Pedal on at start of each bar.
+			pedalEvents = append(pedalEvents, schema.NoteEvent{
+				Type: "control", Pitch: 64, // CC64 = sustain
+				StartBeat: base, DurationBeat: 0,
+				Velocity: 127, // on
+			})
+			// Pedal off at end of bar (except last note holds).
+			pedalEvents = append(pedalEvents, schema.NoteEvent{
+				Type: "control", Pitch: 64,
+				StartBeat: base + 3.5, DurationBeat: 0,
+				Velocity: 0, // off
+			})
+		}
+		evMap[key] = append(evs, pedalEvents...)
+	}
+	fmt.Println("  [SustainPedal] CC64 on/off added to piano tracks")
+}
+
 // ApplyEnding adds a proper song ending: last 4 bars get ritardando
 // (notes stretch to fill space) + final chord hold on the last bar.
 func ApplyEnding(evMap map[string][]schema.NoteEvent, totalBars int) {
