@@ -23,7 +23,7 @@ func InitDB(dbPath string) error {
 	os.MkdirAll(filepath.Dir(dbPath), 0755)
 
 	var err error
-	DB, err = sql.Open("sqlite3", dbPath)
+	DB, err = sql.Open("sqlite", dbPath)
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
 	}
@@ -261,6 +261,29 @@ func AddHistory(userID int64, prompt, style, keyName string, bpm, bars int, midi
 		userID, prompt, style, keyName, bpm, bars, midiPath, durS, notes,
 	)
 	return err
+}
+
+// GetHistoryEntry returns a single generation history entry.
+func GetHistoryEntry(id int64) (*HistoryEntry, error) {
+	var e HistoryEntry
+	var prompt, midiPath sql.NullString
+	var dur sql.NullFloat64
+	var notes sql.NullInt64
+	err := DB.QueryRow(
+		`SELECT id, prompt, style, key_name, bpm, bars, midi_path, duration_s, note_count, created_at
+		 FROM generation_history WHERE id = ?`, id,
+	).Scan(&e.ID, &prompt, &e.Style, &e.KeyName, &e.BPM, &e.Bars, &midiPath, &dur, &notes, &e.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	e.Prompt = prompt.String
+	e.MIDIPath = midiPath.String
+	e.DurationS = dur.Float64
+	e.NoteCount = int(notes.Int64)
+	return &e, nil
 }
 
 // GetHistory returns recent generations for a user.

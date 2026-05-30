@@ -21,10 +21,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 
 	"github.com/ShowerBandV/text2midi/internal/agent"
 	"github.com/ShowerBandV/text2midi/internal/composer"
@@ -71,6 +72,7 @@ func main() {
 		mux.HandleFunc("GET /api/user/prefs", srv.requireAuth(srv.handleGetPrefs))
 		mux.HandleFunc("PUT /api/user/prefs", srv.requireAuth(srv.handleSavePrefs))
 		mux.HandleFunc("GET /api/user/history", srv.requireAuth(srv.handleHistory))
+		mux.HandleFunc("GET /api/user/history/{id}", srv.requireAuth(srv.handleHistoryDetail))
 	}
 
 	mux.HandleFunc("GET /api/info", srv.handleInfo)
@@ -230,6 +232,21 @@ func (srv *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"history": entries})
+}
+
+func (srv *Server) handleHistoryDetail(w http.ResponseWriter, r *http.Request) {
+	u := userFromContext(r.Context())
+	if u == nil {
+		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		return
+	}
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	entry, err := user.GetHistoryEntry(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	writeJSON(w, 200, entry)
 }
 
 // Server holds shared state for HTTP handlers.

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Navbar from "./components/Navbar";
 import Library from "./components/Library";
-import { MidiNote, InstrumentType, MidiTrack, MidiMetadata } from "./types";
+import { MidiNote, InstrumentType, MidiTrack, MidiMetadata, User, InfoResponse } from "./types";
 import {
   Sparkles,
   Music,
@@ -11,6 +11,7 @@ import {
   Mic,
   Volume2
 } from "lucide-react";
+import * as api from "./utils/api";
 
 // Pre-defined initial template tracks to make the application fully functional out of the box!
 const INITIAL_TRACKS: MidiTrack[] = [
@@ -96,7 +97,57 @@ const INITIAL_TRACKS: MidiTrack[] = [
 export default function App() {
   const [activeTab, setActiveTab] = useState<"generate" | "library">("generate");
   const [prompt, setPrompt] = useState("");
-  
+
+  // ─── Auth state ───────────────────────────────────────────────────
+  const [user, setUser] = useState<User | null>(null);
+
+  // Restore session from localStorage
+  useEffect(() => {
+    const token = api.getToken();
+    if (token) {
+      // Try to fetch prefs as a session validation
+      api.getPrefs()
+        .then(() => {
+          // Token is valid — we'd need user info; for now just indicate logged in
+          // The backend doesn't expose a /me endpoint, so store minimal user info
+          setUser({ id: 0, username: 'User', created_at: '' });
+        })
+        .catch(() => {
+          api.clearToken();
+          setUser(null);
+        });
+    }
+  }, []);
+
+  const handleLogin = async (username: string, password: string) => {
+    const res = await api.login(username, password);
+    api.setToken(res.token);
+    setUser(res.user);
+    return res;
+  };
+
+  const handleRegister = async (username: string, password: string) => {
+    const res = await api.register(username, password);
+    api.setToken(res.token);
+    setUser(res.user);
+    return res;
+  };
+
+  const handleLogout = async () => {
+    try { await api.logout(); } catch { /* ignore */ }
+    api.clearToken();
+    setUser(null);
+  };
+
+  // ─── Info (styles/tiers) ──────────────────────────────────────────
+  const [info, setInfo] = useState<InfoResponse | null>(null);
+
+  useEffect(() => {
+    api.getInfo()
+      .then(setInfo)
+      .catch(() => {/* backend might not be running */});
+  }, []);
+
   // Synthesizer Parameter State variables (defaults to values of first tracks)
   const [tempo, setTempo] = useState(128);
   const [rootKey, setRootKey] = useState("C");
@@ -111,22 +162,23 @@ export default function App() {
 
   // Load history from backend on mount
   useEffect(() => {
-    fetch('/api/files')
-      .then(r => r.json())
-      .then((records: any[]) => {
+    api.listFiles()
+      .then((records) => {
         if (Array.isArray(records) && records.length > 0) {
-          const historyTracks: MidiTrack[] = records.map((r: any) => ({
+          const historyTracks: MidiTrack[] = records.map((r) => ({
             id: r.id || 'track-' + Math.random(),
             notes: [],
             metadata: {
               title: r.file_name || 'Untitled',
               seed: Math.floor(Math.random() * 9000000) + 1000000,
-              tempo: 120,
+              tempo: r.render_meta?.ticks_per_beat ? 120 : 120,
               key: 'C',
               scale: 'Major',
               complexity: 'Medium',
               genre: 'Generated',
-              durationStr: '00:00'
+              durationStr: r.render_meta?.duration_seconds
+                ? Math.floor(r.render_meta.duration_seconds / 60) + ':' + String(Math.floor(r.render_meta.duration_seconds % 60)).padStart(2, '0')
+                : '00:00'
             },
             instrument: 'piano' as InstrumentType,
             globalVelocity: 80,
@@ -195,43 +247,35 @@ export default function App() {
   const handleGenerateMidi = async () => {
     setIsGenerating(true);
     try {
-      const styleMap: Record<string, string> = {
-        piano: "pop",
-        synth: "trap",
-        strings: "cinematic",
-      };
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          style: styleMap[instrument] || "pop",
-          bpm: tempo,
-          key: rootKey + " " + scaleType.toLowerCase(),
-          bars: 8,
-          tier: "free"
-        })
+      // Use dynamic styles from backend info if available
+      const styleName = info?.styles?.[0] || "pop";
+      const response = await api.generateMidi({
+        prompt,
+        style: styleName,
+        bpm: tempo,
+        key: rootKey + " " + scaleType.toLowerCase(),
+        bars: 8,
+        tier: "free"
       });
 
-      const data = await response.json();
-      if (data && data.fileId) {
+      if (response && response.fileId) {
         const newTrack: MidiTrack = {
           id: "track-" + Date.now(),
           notes: [],
           metadata: {
-            title: data.fileName || data.meta?.title || "Generated Track",
+            title: response.fileName || response.meta?.output_path?.split("/").pop()?.replace(".mid", "") || "Generated Track",
             seed: Math.floor(Math.random() * 9000000) + 1000000,
             tempo: tempo,
             key: rootKey,
             scale: scaleType,
             complexity: "Medium",
             genre: prompt?.split(" ").slice(0, 2).join(" ") || "Generated",
-            durationStr: data.durationSeconds ? Math.floor(data.durationSeconds / 60) + ":" + String(Math.floor(data.durationSeconds % 60)).padStart(2, "0") : "03:00"
+            durationStr: response.durationSeconds ? Math.floor(response.durationSeconds / 60) + ":" + String(Math.floor(response.durationSeconds % 60)).padStart(2, "0") : "03:00"
           },
           instrument,
           globalVelocity,
           createdAt: new Date().toISOString(),
-          fileId: data.fileId
+          fileId: response.fileId
         };
 
         setTracks([newTrack, ...tracks]);
@@ -253,7 +297,14 @@ export default function App() {
       <div className="absolute bottom-[20%] left-[-5%] w-[400px] h-[400px] bg-secondary/8 blur-[110px] rounded-full -z-10 pointer-events-none" />
 
       {/* Shared Navigation Header */}
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        user={user}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        onLogout={handleLogout}
+      />
 
       {/* Main Container screen sections */}
       <main className="flex-1 overflow-hidden min-h-0">
@@ -343,6 +394,21 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* Backend info: available styles & tier limits */}
+              {info && (
+                <div className="flex flex-wrap items-center gap-3 text-[10px] text-on-surface-variant font-mono justify-center">
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
+                    Styles: {info.styles?.join(', ') || 'N/A'}
+                  </span>
+                  <span className="opacity-30">|</span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    Tiers: {Object.entries(info.tiers || {}).map(([t, b]) => `${t} (${b} bars)`).join(' · ')}
+                  </span>
+                </div>
+              )}
 
               {/* Bento Grid layouts */}
               <div className="mx-auto grid grid-cols-1 md:grid-cols-12 gap-lg mt-xl select-none select-none">
@@ -442,13 +508,13 @@ export default function App() {
           
 
           {activeTab === "library" && (
-            <div className="mt-4">
+            <div className="mt-4 h-[calc(100%-1rem)]">
               <Library
                 tracks={tracks}
                 setTracks={setTracks}
                 activeTrackId={activeTrackId}
                 setActiveTrackId={setActiveTrackId}
-                
+
               />
             </div>
           )}
