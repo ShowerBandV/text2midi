@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, Library as LibIcon, Piano, Wallet, LogIn, Disc } from "lucide-react";
+import { Sparkles, Library as LibIcon, Piano, LogIn } from "lucide-react";
 
 interface NavbarProps {
   activeTab: "generate" | "library";
@@ -68,37 +68,7 @@ export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
 
         {/* Right Controls */}
         <div className="flex items-center gap-md">
-          <button className="hidden sm:flex items-center gap-1.5 text-on-surface-variant hover:text-primary transition-colors cursor-pointer text-sm font-medium px-md py-sm">
-            <LogIn className="w-4 h-4" />
-            Login
-          </button>
           
-          <button
-            onClick={handleConnectWallet}
-            disabled={isConnecting}
-            className={`relative flex items-center gap-2 bg-gradient-to-r ${
-              walletConnected 
-                ? "from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-400"
-                : "from-primary-container to-secondary-container text-on-primary-container"
-            } px-lg py-sm rounded-full font-bold hover:scale-105 active:scale-95 transition-all shadow-lg neon-glow cursor-pointer`}
-          >
-            {isConnecting ? (
-              <>
-                <Disc className="w-4 h-4 animate-spin text-on-primary-container" />
-                <span>Syncing...</span>
-              </>
-            ) : walletConnected ? (
-              <>
-                <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="font-mono text-xs">{walletAddress}</span>
-              </>
-            ) : (
-              <>
-                <Wallet className="w-4 h-4" />
-                <span className="text-xs">Connect Wallet</span>
-              </>
-            )}
-          </button>
         </div>
       </div>
     </nav>
