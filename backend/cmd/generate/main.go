@@ -798,9 +798,9 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 		case chordStyle == "metal":
 			l = composer.GenerateLeadMetal(keyRoot, bars, energy)
 		case chordStyle == "rock":
-			l = composer.GenerateLeadSectioned(composer.GetScaleDegrees(keyRoot, leadKeyMode), bars, energy)
+			l = composer.GenerateLeadRock(keyRoot, bars, energy)
 		case chordStyle == "punk":
-			l = composer.GenerateLeadSectioned(composer.GetScaleDegrees(keyRoot, "minor"), bars, energy)
+			l = composer.GenerateLeadPunk(keyRoot, bars, energy)
 		case chordStyle == "pop" || chordStyle == "rpg" || chordStyle == "healing" || chordStyle == "victory":
 			if chaos > 0.03 {
 				// With chaos, motif-based melody shines.
