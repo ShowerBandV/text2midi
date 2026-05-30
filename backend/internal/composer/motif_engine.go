@@ -946,6 +946,9 @@ func shapeMelodyArch(events []schema.NoteEvent, totalBars int, tonicPitch int) [
 }
 
 // getScaleDegrees returns MIDI-compatible scale pitches for a given key.
+// GetScaleDegrees returns MIDI pitches for a given root and mode (major/minor/dorian/etc).
+func GetScaleDegrees(root, mode string) []int { return getScaleDegrees(root, mode) }
+
 func getScaleDegrees(root, mode string) []int {
 	rootSemi := map[string]int{
 		"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5,

@@ -810,7 +810,13 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 		case chordStyle == "punk":
 			l = composer.GenerateLeadPunk(keyRoot, bars, energy)
 		case chordStyle == "pop" || chordStyle == "rpg" || chordStyle == "healing" || chordStyle == "victory":
-			l = composer.GeneratePianoLegend(keyRoot, leadKeyMode, bars, chords)
+			if chaos > 0.03 {
+				// With chaos, motif-based melody shines.
+				scale := composer.GetScaleDegrees(keyRoot, leadKeyMode)
+				l = composer.GenerateLeadMotif(scale, bars, energy)
+			} else {
+				l = composer.GeneratePianoLegend(keyRoot, leadKeyMode, bars, chords)
+			}
 		default:
 			l = composer.GenerateLeadMidra(keyRoot, leadKeyMode, bars, stepProb, velMin, velMax, secDensity, secRegister, pentatonic)
 		}
