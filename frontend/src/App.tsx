@@ -432,7 +432,7 @@ export default function App() {
                   Elevate Your Sound
                 </h2>
                 <p className="text-on-surface-variant text-xs mt-3">
-                  Join 50,000+ producers using MidiMind to break through creative blocks.
+                  AI-powered MIDI generation — turn your ideas into music.
                 </p>
               </section>
 

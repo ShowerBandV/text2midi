@@ -13,6 +13,7 @@ package main
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -20,7 +21,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
+
+	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/ShowerBandV/text2midi/internal/agent"
 	"github.com/ShowerBandV/text2midi/internal/composer"
@@ -30,6 +35,7 @@ import (
 	"github.com/ShowerBandV/text2midi/internal/schema"
 	"github.com/ShowerBandV/text2midi/internal/store"
 	"github.com/ShowerBandV/text2midi/internal/style"
+	"github.com/ShowerBandV/text2midi/internal/user"
 )
 
 func main() {
@@ -54,6 +60,20 @@ func main() {
 		log.Println("🔑 API key detected — LLM-powered generation available")
 	}
 
+	// ── User system ──────────────────────────────────────────────
+	if err := user.InitDB("./data/text2midi_users.db"); err != nil {
+		log.Printf("⚠️  User DB init failed (user features disabled): %v", err)
+	} else {
+		log.Println("👤 User system ready")
+
+		mux.HandleFunc("POST /api/user/register", srv.handleRegister)
+		mux.HandleFunc("POST /api/user/login", srv.handleLogin)
+		mux.HandleFunc("POST /api/user/logout", srv.handleLogout)
+		mux.HandleFunc("GET /api/user/prefs", srv.requireAuth(srv.handleGetPrefs))
+		mux.HandleFunc("PUT /api/user/prefs", srv.requireAuth(srv.handleSavePrefs))
+		mux.HandleFunc("GET /api/user/history", srv.requireAuth(srv.handleHistory))
+	}
+
 	mux.HandleFunc("GET /api/info", srv.handleInfo)
 	mux.HandleFunc("POST /api/generate", srv.handleGenerate)
 	mux.HandleFunc("GET /api/files", srv.handleFileList)
@@ -73,6 +93,148 @@ func main() {
 	if err := http.ListenAndServe(addr, withCORS(mux)); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// ─── Auth middleware ────────────────────────────────────────────────
+
+func (srv *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("Authorization")
+		if token == "" {
+			// Also check cookie.
+			if c, err := r.Cookie("session"); err == nil {
+				token = c.Value
+			}
+		}
+		if token == "" {
+			writeJSON(w, 401, map[string]string{"error": "authentication required"})
+			return
+		}
+		// Strip "Bearer " prefix.
+		token = strings.TrimPrefix(token, "Bearer ")
+
+		u, err := user.ValidateSession(token)
+		if err != nil {
+			writeJSON(w, 401, map[string]string{"error": "invalid or expired session"})
+			return
+		}
+		// Store user ID in request context.
+		ctx := r.Context()
+		ctx = contextWithUser(ctx, u)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+type contextKey string
+
+func contextWithUser(r *http.Request, u *user.User) *http.Request {
+	// Simplified: store in header (not ideal, but avoids full context package)
+	r.Header.Set("X-User-ID", strconv.FormatInt(u.ID, 10))
+	r.Header.Set("X-Username", u.Username)
+	return r
+}
+
+func userFromRequest(r *http.Request) *user.User {
+	id, _ := strconv.ParseInt(r.Header.Get("X-User-ID"), 10, 64)
+	if id == 0 {
+		return nil
+	}
+	return &user.User{ID: id, Username: r.Header.Get("X-Username")}
+}
+
+// ─── Auth handlers ─────────────────────────────────────────────────
+
+func (srv *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	u, err := user.Register(req.Username, req.Password)
+	if err != nil {
+		writeJSON(w, 409, map[string]string{"error": err.Error()})
+		return
+	}
+	// Auto-login: create session.
+	_, token, _ := user.Login(req.Username, req.Password)
+	writeJSON(w, 201, map[string]any{
+		"user":  u,
+		"token": token,
+	})
+}
+
+func (srv *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	u, token, err := user.Login(req.Username, req.Password)
+	if err != nil {
+		writeJSON(w, 401, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{
+		"user":  u,
+		"token": token,
+	})
+}
+
+func (srv *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	token = strings.TrimPrefix(token, "Bearer ")
+	if token != "" {
+		user.Logout(token)
+	}
+	writeJSON(w, 200, map[string]string{"status": "logged out"})
+}
+
+func (srv *Server) handleGetPrefs(w http.ResponseWriter, r *http.Request) {
+	u := userFromRequest(r)
+	if u == nil {
+		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		return
+	}
+	prefs := user.GetPrefs(u.ID)
+	writeJSON(w, 200, prefs)
+}
+
+func (srv *Server) handleSavePrefs(w http.ResponseWriter, r *http.Request) {
+	u := userFromRequest(r)
+	if u == nil {
+		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		return
+	}
+	var prefs user.Prefs
+	if err := json.NewDecoder(r.Body).Decode(&prefs); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if err := user.SavePrefs(u.ID, &prefs); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "saved"})
+}
+
+func (srv *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
+	u := userFromRequest(r)
+	if u == nil {
+		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		return
+	}
+	entries, err := user.GetHistory(u.ID, 20)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"history": entries})
 }
 
 // Server holds shared state for HTTP handlers.
