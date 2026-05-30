@@ -343,15 +343,18 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
-	// Check user credits if authenticated.
-	if u := userFromContext(r.Context()); u != nil {
-		credits := user.CheckCredits(u.ID)
-		if credits <= 0 {
-			writeJSON(w, 402, map[string]any{
-				"error": "out of generations — add credits via POST /api/user/credits/add",
-			})
-			return
-		}
+	// Require authentication. Unauthenticated users cannot generate.
+	u := userFromContext(r.Context())
+	if u == nil {
+		writeJSON(w, 401, map[string]any{"error": "login required — register/login first"})
+		return
+	}
+	credits := user.CheckCredits(u.ID)
+	if credits <= 0 {
+		writeJSON(w, 402, map[string]any{
+			"error": "out of generations — add credits via POST /api/user/credits/add",
+		})
+		return
 	}
 
 	var req GenerateRequest
@@ -396,8 +399,7 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Consume credit after successful generation.
-	if u := userFromContext(r.Context()); u != nil {
-		if remaining, ok := user.ConsumeCredit(u.ID); ok {
+	if remaining, ok := user.ConsumeCredit(u.ID); ok {
 			writeJSON(w, http.StatusOK, GenerateResponse{
 				FileID:   result.FileID,
 				FileName: result.FileName,
@@ -408,8 +410,6 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 				Credits:  remaining,
 			})
 			return
-		}
-		// Credit consumption failed (shouldn't happen since we checked above).
 	}
 	writeJSON(w, http.StatusOK, result)
 }

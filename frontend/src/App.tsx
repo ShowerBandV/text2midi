@@ -573,7 +573,7 @@ export default function App() {
                     {/* mic overlay icon details */}
                     <div className="absolute bottom-4 right-4 flex items-center gap-sm opacity-60 select-none">
                       <Mic className="w-4 h-4 text-on-surface-variant" />
-                      <span className="text-[10px] font-mono tracking-widest uppercase text-on-surface-variant">Voice Active</span>
+                      <span className="text-[10px] font-mono tracking-widest uppercase text-on-surface-variant">{t("misc.voiceActive")}</span>
                     </div>
                   </div>
 
@@ -711,7 +711,7 @@ export default function App() {
                   </svg>
                 </div>
                 <h2 className="font-display font-black text-headline-lg-mobile md:text-headline-lg text-white leading-none">
-                  Elevate Your Sound
+                  {t("misc.elevate")}
                 </h2>
                 <p className="text-on-surface-variant text-xs mt-3">
                   {t("footer.tagline")}
@@ -749,15 +749,15 @@ export default function App() {
               MidiMind AI
             </div>
             <p className="font-mono text-[10px] text-on-surface-variant opacity-80">
-              © 2026 MidiMind AI. All rights reserved.
+              {t("misc.copyright")}
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-lg font-mono text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
-            <a className="hover:text-primary transition-colors" href="#terms">Terms</a>
-            <a className="hover:text-primary transition-colors" href="#privacy">Privacy</a>
-            <a className="hover:text-primary transition-colors" href="#api">API docs</a>
-            <a className="hover:text-primary transition-colors" href="#discord">Discord</a>
-            <a className="hover:text-primary transition-colors" href="#twitter">Twitter / X</a>
+            <a className="hover:text-primary transition-colors" href="#terms">{t("footer.terms")}</a>
+            <a className="hover:text-primary transition-colors" href="#privacy">{t("footer.privacy")}</a>
+            <a className="hover:text-primary transition-colors" href="#api">{t("footer.api")}</a>
+            <a className="hover:text-primary transition-colors" href="#discord">{t("footer.discord")}</a>
+            <a className="hover:text-primary transition-colors" href="#twitter">{t("footer.twitter")}</a>
           </div>
         </div>
       </footer>

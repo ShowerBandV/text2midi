@@ -336,7 +336,7 @@ export default function Library({
             <div className="w-full md:w-48 shrink-0 bg-surface-container-high rounded-xl p-2 border border-white/10 shadow-lg">
               <div className="rounded-lg p-3 flex flex-col justify-between border border-white/5 bg-black/55 relative overflow-hidden min-h-[7rem]">
                 <div className="flex justify-between items-start">
-                  <span className="text-[9px] text-secondary font-bold tracking-widest bg-secondary/10 px-1.5 py-0.5 rounded-full">A-SIDE</span>
+                  <span className="text-[9px] text-secondary font-bold tracking-widest bg-secondary/10 px-1.5 py-0.5 rounded-full">{t("misc.aSide")}</span>
                   <Disc2 className={`w-4 h-4 text-primary ${isPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '1.5s' }} />
                 </div>
                 <div className="mt-auto">
@@ -344,7 +344,7 @@ export default function Library({
                     {activeTrack.metadata.title}
                   </h2>
                   <p className="text-[9px] text-on-surface-variant tracking-wider uppercase font-medium mt-0.5">
-                    SEED: {activeTrack.metadata.seed}
+                    {t("meta.seed")}: {activeTrack.metadata.seed}
                   </p>
                 </div>
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(208,188,255,0.08),transparent_50%)]" />
@@ -364,10 +364,10 @@ export default function Library({
             {/* Metadata grid */}
             <div className="flex-1 grid grid-cols-2 gap-2 w-full">
               {[
-                { icon: Clock, label: 'Duration', value: activeTrack.metadata.durationStr, color: 'text-secondary' },
-                { icon: Music, label: 'Key', value: `${activeTrack.metadata.key} ${activeTrack.metadata.scale}`, color: 'text-primary' },
-                { icon: Gauge, label: 'Tempo', value: `${activeTrack.metadata.tempo} BPM`, color: 'text-primary' },
-                { icon: Sliders, label: 'Complexity', value: activeTrack.metadata.complexity, color: 'text-secondary' },
+                { icon: Clock, label: t('meta.duration'), value: activeTrack.metadata.durationStr, color: 'text-secondary' },
+                { icon: Music, label: t('meta.key'), value: `${activeTrack.metadata.key} ${activeTrack.metadata.scale}`, color: 'text-primary' },
+                { icon: Gauge, label: t('meta.tempo'), value: `${activeTrack.metadata.tempo} BPM`, color: 'text-primary' },
+                { icon: Sliders, label: t('meta.complexity'), value: activeTrack.metadata.complexity, color: 'text-secondary' },
               ].map((item) => (
                 <div key={item.label} className="bg-white/5 p-2.5 rounded-lg border border-white/5">
                   <p className="text-[9px] text-on-surface-variant uppercase flex items-center gap-1 mb-0.5">
@@ -380,10 +380,10 @@ export default function Library({
               ))}
               <div className="col-span-2 flex flex-wrap gap-2 mt-1">
                 <span className="px-3 py-1 bg-primary/15 rounded-full border border-primary/30 text-primary text-xs font-semibold">
-                  {activeTrack.metadata.genre || 'Generated'}
+                  {activeTrack.metadata.genre || t('misc.generated')}
                 </span>
                 <span className="px-3 py-1 bg-secondary/15 rounded-full border border-secondary/30 text-secondary text-xs font-semibold">
-                  {activeTrack.instrument}
+                  {t("misc." + activeTrack.instrument as any) || activeTrack.instrument}
                 </span>
               </div>
             </div>
@@ -615,13 +615,13 @@ export default function Library({
               {dnaResult.dna && (
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { label: "Structure", key: "structure", color: "text-primary" },
-                    { label: "Harmony", key: "harmony", color: "text-secondary" },
-                    { label: "Motif", key: "motif", color: "text-tertiary" },
-                    { label: "Rhythm", key: "rhythm", color: "text-primary" },
-                    { label: "Texture", key: "texture", color: "text-secondary" },
-                    { label: "Dynamics", key: "dynamics", color: "text-tertiary" },
-                    { label: "Emotion", key: "emotion", color: "text-primary" },
+                    { label: t("dna.structure"), key: "structure", color: "text-primary" },
+                    { label: t("dna.harmony"), key: "harmony", color: "text-secondary" },
+                    { label: t("dna.motif"), key: "motif", color: "text-tertiary" },
+                    { label: t("dna.rhythm"), key: "rhythm", color: "text-primary" },
+                    { label: t("dna.texture"), key: "texture", color: "text-secondary" },
+                    { label: t("dna.dynamics"), key: "dynamics", color: "text-tertiary" },
+                    { label: t("dna.emotion"), key: "emotion", color: "text-primary" },
                   ].map((dim) => {
                     const val = dnaResult.dna[dim.key];
                     if (!val) return null;

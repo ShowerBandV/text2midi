@@ -103,4 +103,20 @@ export const zh: typeof en = {
 
   // Misc
   "buyMeCoffee": "请我喝杯咖啡",
+  "misc.aSide": "A 面",
+  "misc.generated": "已生成",
+  "misc.voiceActive": "语音输入",
+  "misc.elevate": "提升你的音乐",
+  "misc.copyright": "© 2026 MidiMind AI. 保留所有权利。",
+  "misc.polyphonic": "多声道",
+  "misc.piano": "钢琴",
+  "dna.structure": "结构",
+  "dna.harmony": "和声",
+  "dna.motif": "动机",
+  "dna.rhythm": "节奏",
+  "dna.texture": "织体",
+  "dna.dynamics": "力度",
+  "dna.emotion": "情感",
+  "misc.synth": "合成器",
+  "misc.strings": "弦乐",
 };

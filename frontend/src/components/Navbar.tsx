@@ -224,7 +224,7 @@ export default function Navbar({ activeTab, setActiveTab, user, onLogin, onRegis
             <button
               onClick={() => setLang(lang === "zh" ? "en" : "zh")}
               className="w-8 h-8 rounded-lg bg-surface-container-high border border-white/10 flex items-center justify-center text-xs font-bold text-on-surface-variant hover:text-white hover:border-white/30 transition-all cursor-pointer"
-              title={lang === "zh" ? "Switch to English" : "切换到中文"}
+              title={lang === "zh" ? "English" : "中文"}
             >
               <Globe className="w-3.5 h-3.5" />
             </button>
