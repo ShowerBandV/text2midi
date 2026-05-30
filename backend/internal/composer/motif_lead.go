@@ -13,84 +13,89 @@ func GenerateLeadMotif(scale []int, totalBars int, _ float64) []schema.NoteEvent
 	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 
-	hook := buildHook(scale, rng)
-	inverted := Invert(hook)
-	fragmented := Fragment(hook, 3)
-	transposed := Transpose(hook, 7)                                   // up a 5th
+	// Build a MUSICAL phrase, not a mathematical pattern.
+	// Each phrase has: question (rise) → answer (fall) → rest (breath).
+	question := buildQuestion(scale, rng) // 4 notes rising
+	answer := buildAnswer(scale, rng)      // 3 notes falling to resolution
+	rhythmSlow := []float64{0.5, 0.5, 0.5, 0.5} // quarter-note feel
+	rhythmFast := []float64{0.25, 0.25, 0.25, 0.5, 0.25, 0.25, 0.5} // eighth-note feel
 
 	for bar := 0; bar < totalBars; bar++ {
 		base := float64(bar) * 4.0
-		cycle := bar % 16 // 16-bar phrase cycle
+		cycle := bar % 16
 
 		var phrase []int
-		var spacing float64
+		var rhythm []float64
+		octave := 4
 
 		switch {
 		case cycle < 4:
-			// Statement: play the hook as-is, with breath between phrases.
-			phrase = hook
-			spacing = 0.5
-			if bar%2 == 1 {
-				continue // rest every other bar for breathing
-			}
-		case cycle < 8:
-			phrase = transposed // hook up a 5th (via Transpose from motif_engine)
-			spacing = 0.5
+			// Statement: question alone, with breath.
+			phrase = question
+			rhythm = rhythmSlow
 			if bar%2 == 1 { continue }
+		case cycle < 8:
+			// Development: question + answer, higher octave.
+			phrase = append(append([]int{}, question...), answer...)
+			rhythm = rhythmFast
+			octave = 5
 		case cycle < 12:
-			phrase = inverted // mirror image (via Invert)
-			spacing = 0.25
+			// Climax: question repeated twice, fast, highest octave.
+			phrase = append(append([]int{}, question...), question...)
+			rhythm = rhythmFast
+			octave = 5
 		case cycle < 16:
-			phrase = fragmented // first 3 notes only (via Fragment)
-			spacing = 0.5
+			// Resolution: answer alone, low octave, half-time.
+			phrase = answer
+			rhythm = rhythmSlow
+			octave = 4
 			if bar%2 == 1 { continue }
 		}
 
+		var t float64
 		for i, p := range phrase {
-			oct := 4
-			if bar >= 16 {
-				oct = 5 // second half of song: octave up
-			}
-			pitch := p + 12*oct
-			if pitch < 48 {
-				pitch += 12
-			}
-			if pitch > 96 {
-				pitch -= 12
-			}
-			vel := 100
-			dur := spacing * 0.8
-			if dur < 0.08 {
-				dur = 0.08
-			}
+			pitch := p + 12*octave
+			if pitch < 48 { pitch += 12 }
+			if pitch > 96 { pitch -= 12 }
+
+			dur := rhythm[i%len(rhythm)] * 0.8
+			if dur < 0.06 { dur = 0.06 }
+
 			events = append(events, schema.NoteEvent{
 				Type: "note", Pitch: pitch,
-				StartBeat: base + float64(i)*spacing, DurationBeat: dur,
-				Velocity: vel,
+				StartBeat: base + t, DurationBeat: dur,
+				Velocity: 100,
 			})
+			t += rhythm[i%len(rhythm)]
 		}
 	}
 
 	return events
 }
 
-// buildHook creates a 4-note motif from the scale.
-func buildHook(scale []int, rng *rand.Rand) []int {
-	if len(scale) < 4 {
-		return []int{0, 2, 4, 2}
+// buildQuestion creates a 4-note rising phrase that ends on an "open" note (not the root).
+func buildQuestion(scale []int, rng *rand.Rand) []int {
+	// Walk up the scale: 1→2→3→5 (open, wants resolution)
+	root := scale[0]
+	third := scale[2]
+	fifth := scale[4]
+	if len(scale) < 5 {
+		return []int{root, root + 2, root + 4, root + 7}
 	}
-	// Pick notes that form a recognizable shape: up-down or down-up.
-	idx := rng.Intn(len(scale) / 2)
-	hook := []int{
-		scale[idx],
-		scale[(idx+2)%len(scale)],
-		scale[(idx+4)%len(scale)],
-		scale[(idx+1)%len(scale)],
+	// Choose between two question shapes.
+	if rng.Float64() < 0.5 {
+		return []int{root, scale[1], third, fifth} // 1-2-3-5 (classic rising)
 	}
-	return hook
+	return []int{root, third, fifth, scale[6%len(scale)]} // 1-3-5-7 (arpeggio)
 }
 
-// buildAnswer creates a 4-note phrase related to the hook but resolving differently.
-func buildAnswer(hook []int, scale []int, rng *rand.Rand) []int {
-	return []int{hook[2], hook[1], hook[0], scale[0]}
+// buildAnswer creates a falling phrase that resolves to the root.
+func buildAnswer(scale []int, rng *rand.Rand) []int {
+	fifth := scale[4]
+	third := scale[2]
+	root := scale[0]
+	if rng.Float64() < 0.5 {
+		return []int{fifth, third, root} // 5-3-1 (perfect cadence)
+	}
+	return []int{fifth, scale[4], third, root} // 5-4-3-1 (stepwise resolution)
 }

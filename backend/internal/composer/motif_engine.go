@@ -812,8 +812,16 @@ func GenerateLeadRock(keyRoot string, totalBars int, energy float64) []schema.No
 	return events
 }
 
+// buildHook creates a simple 4-note motif from the scale (used by GenerateLeadSectioned).
+func buildHook(scale []int, rng *rand.Rand) []int {
+	if len(scale) < 4 {
+		return []int{0, 2, 4, 2}
+	}
+	idx := rng.Intn(len(scale) / 2)
+	return []int{scale[idx], scale[(idx+2)%len(scale)], scale[(idx+4)%len(scale)], scale[(idx+1)%len(scale)]}
+}
+
 // GenerateLeadSectioned creates a lead that varies by song section.
-// Intro=hook, Verse=sparse, Chorus=full, Bridge=solo/rest, Outro=hook recap.
 func GenerateLeadSectioned(scale []int, totalBars int, _ float64) []schema.NoteEvent {
 	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
