@@ -7,8 +7,7 @@ import (
 )
 
 // InjectChaos randomly mutates a fraction of events for "happy accidents".
-// prob is 0-1: fraction of events to potentially modify.
-// Modifications: pitch shift ±1-3 semitones, duration stretch/shrink, velocity jitter.
+// Also has a 1% chance of structural mutations (drop bar, extra silence burst).
 func InjectChaos(events []schema.NoteEvent, prob float64) {
 	if prob <= 0 || len(events) == 0 {
 		return
@@ -52,6 +51,17 @@ func InjectChaos(events []schema.NoteEvent, prob float64) {
 				events[i].Velocity = 120
 			} else {
 				events[i].Velocity = 50
+			}
+		}
+	}
+
+	// Structural chaos: 1% chance of muting a random bar for sudden silence.
+	if prob > 0 && len(events) > 16 && rand.Float64() < prob*0.2 {
+		dropBar := rand.Intn(len(events)/8) * 8 // pick a random bar start
+		for i := range events {
+			bar := int(events[i].StartBeat) / 4
+			if bar == dropBar {
+				events[i].Velocity = 1
 			}
 		}
 	}

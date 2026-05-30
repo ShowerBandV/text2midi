@@ -909,6 +909,10 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 		flattenVelocities(evMap, flatVel)
 	}
 
+	// ── Orchestration: progressive layered entrance ──────────
+	// (after flatVel so instrument layering survives velocity normalization)
+	applyOrchestrationCurve(evMap, bars, chordStyle)
+
 	// ── SF2 profile loading ───────────────────────────────────
 	var sf2Profile *musicdna.SF2Profile
 	if sf2Path != "" {

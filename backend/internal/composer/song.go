@@ -1662,7 +1662,10 @@ func chordsPower(chords []string, totalBars int, style string) []schema.NoteEven
 		}
 		root := chordRootMIDI(chord, rootOct)
 		base := float64(bar) * 4.0
-		pitches := []int{root, root + 7}
+		pitches := []int{root, root + 7}
+		if bar%4 >= 2 {
+			pitches = []int{root + 7, root + 12} // 1st inversion
+		}
 
 		// Pick rhythm pattern per style.
 		type hit struct{ beat, dur, vel float64 }

@@ -843,10 +843,10 @@ func GenerateLeadSectioned(scale []int, totalBars int, _ float64) []schema.NoteE
 				})
 			}
 		case "chorus", "chorus2":
-			// Full — hook with double-stops.
+			// Full — hook with double-stops, octave UP from chords.
 			for i, p := range hook {
 				events = append(events, schema.NoteEvent{
-					Type: "note", Pitch: p + 12*5,
+					Type: "note", Pitch: p + 12*5, // octave above rhythm guitar
 					StartBeat: base + float64(i)*0.4, DurationBeat: 0.15, Velocity: 100,
 				})
 				events = append(events, schema.NoteEvent{

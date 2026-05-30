@@ -13,8 +13,10 @@ func GenerateLeadMotif(scale []int, totalBars int, _ float64) []schema.NoteEvent
 	rng := rand.New(rand.NewSource(globalSeed))
 	var events []schema.NoteEvent
 
-	hook := buildHook(scale, rng)           // 4-note motif
-	answer := buildAnswer(hook, scale, rng) // related but different
+	hook := buildHook(scale, rng)
+	inverted := Invert(hook)
+	fragmented := Fragment(hook, 3)
+	transposed := Transpose(hook, 7)                                   // up a 5th
 
 	for bar := 0; bar < totalBars; bar++ {
 		base := float64(bar) * 4.0
@@ -32,23 +34,16 @@ func GenerateLeadMotif(scale []int, totalBars int, _ float64) []schema.NoteEvent
 				continue // rest every other bar for breathing
 			}
 		case cycle < 8:
-			// Transposition: hook up a 4th.
-			phrase = transposeMotif(hook, 5)
+			phrase = transposed // hook up a 5th (via Transpose from motif_engine)
 			spacing = 0.5
-			if bar%2 == 1 {
-				continue
-			}
+			if bar%2 == 1 { continue }
 		case cycle < 12:
-			// Rhythmic variation: same notes, double-time feel.
-			phrase = hook
+			phrase = inverted // mirror image (via Invert)
 			spacing = 0.25
 		case cycle < 16:
-			// Answer: new phrase that resolves.
-			phrase = answer
+			phrase = fragmented // first 3 notes only (via Fragment)
 			spacing = 0.5
-			if bar%2 == 1 {
-				continue
-			}
+			if bar%2 == 1 { continue }
 		}
 
 		for i, p := range phrase {
@@ -97,16 +92,5 @@ func buildHook(scale []int, rng *rand.Rand) []int {
 
 // buildAnswer creates a 4-note phrase related to the hook but resolving differently.
 func buildAnswer(hook []int, scale []int, rng *rand.Rand) []int {
-	// Reverse direction and end on root.
-	answer := []int{hook[2], hook[1], hook[0], scale[0]}
-	return answer
-}
-
-// transposeMotif shifts all notes by N semitones.
-func transposeMotif(motif []int, semitones int) []int {
-	result := make([]int, len(motif))
-	for i, p := range motif {
-		result[i] = p + semitones
-	}
-	return result
+	return []int{hook[2], hook[1], hook[0], scale[0]}
 }
