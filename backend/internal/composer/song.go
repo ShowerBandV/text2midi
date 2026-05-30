@@ -233,8 +233,10 @@ func GenerateBassStyled(style string, chords []string, totalBars int) []schema.N
 		return bassTrap(chords, totalBars)
 	case "ambient", "casual", "healing", "tension":
 		return bassCasual(chords, totalBars)
-	case "jazz", "funk":
-		return GenerateBassMidra(chords, totalBars)
+	case "jazz":
+		return bassJazzWalking(chords, totalBars)
+	case "funk":
+		return bassFunkSlap(chords, totalBars)
 	case "rpg":
 		return bassCasual(chords, totalBars)
 	default:

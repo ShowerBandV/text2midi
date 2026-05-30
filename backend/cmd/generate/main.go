@@ -277,31 +277,32 @@ func main() {
 	if needDrums {
 		go func() {
 			defer wg.Done()
-			// Use rule-based style drums when available (saves 1 LLM call).
+			// Always use rule-based drums (LLM drum JSON too large, prone to parse errors).
 			styleForDrums := determineDrumStyle(intentMap)
-			if styleForDrums != "" {
-				bars := plan.TotalBars
-				energy := plan.FeatureVector.Energy
-				dn := composer.GenerateDrumsStyled(styleForDrums, bars, energy)
-				evMu.Lock()
-				evMap["drums"] = dn
-				evMu.Unlock()
-				fmt.Printf("  [Rhythmist] drums: %d notes (rule-based, style=%s)\n", len(dn), styleForDrums)
-			} else {
-				dn, err := agent.RhythmistAgent(client, plan.Key.Root, plan.Key.Mode, plan.BPM, totalBeats, cpJSON, "drums")
-				evMu.Lock()
-				if err == nil {
-					evMap["drums"] = dn
-				}
-				fmt.Printf("  [Rhythmist] drums: %d notes (LLM, err=%v)\n", len(dn), err)
-				evMu.Unlock()
+			if styleForDrums == "" {
+				// Fallback: use chordStyle from intent or default to pop.
+				styleForDrums = "rpg"
 			}
+			bars := plan.TotalBars
+			energy := plan.FeatureVector.Energy
+			dn := composer.GenerateDrumsStyled(styleForDrums, bars, energy)
+			evMu.Lock()
+			evMap["drums"] = dn
+			evMu.Unlock()
+			fmt.Printf("  [Rhythmist] drums: %d notes (rule-based, style=%s)\n", len(dn), styleForDrums)
 		}()
 	}
 
 	wg.Wait()
 	fmt.Printf("  Generated: %d tracks (LLM agents, parallel)\n", taskCount)
 	saveStage(projectDir, "04_track_events.json", evMap)
+
+	// ── Post-processing (same as local mode) ───────────────────
+	grammar := composer.NewMelodyGrammar(plan.Key.Root, plan.Key.Mode)
+	if evMap["lead"] != nil {
+		evMap["lead"] = grammar.ApplyAll(evMap["lead"], plan.TotalBars)
+		fmt.Printf("  Lead (grammar): %d events\n", len(evMap["lead"]))
+	}
 
 	// --- Orchestrator: add dynamics ---
 	agent.OrchestratorAgent(evMap, plan.TotalBars)
@@ -459,6 +460,10 @@ func main() {
 	if *flatVel > 0 {
 		flattenVelocities(evMap, *flatVel)
 	}
+
+	// ── Orchestration + Ending ─────────────────────────────────
+	applyOrchestrationCurve(evMap, plan.TotalBars, "rpg")
+	composer.ApplyEnding(evMap, plan.TotalBars)
 
 	midiIR := schema.MidiIR{
 		Meta: schema.Meta{
