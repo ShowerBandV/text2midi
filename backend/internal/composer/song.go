@@ -1109,6 +1109,80 @@ func drumsEmo(totalBars int, energy float64) []schema.NoteEvent {
 	return events
 }
 
+// drumsJazz: Swing drums. Ride cymbal timekeeping, hi-hat on 2 and 4, soft kick.
+func drumsJazz(totalBars int, energy float64) []schema.NoteEvent {
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+		// Soft kick on 1 and 3 (feathering).
+		for _, beat := range []float64{0.0, 2.0} {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 36, DrumName: "kick",
+				StartBeat: base + beat, DurationBeat: 0.1, Velocity: 100,
+			})
+		}
+		// Hi-hat on 2 and 4 (chick).
+		for _, beat := range []float64{1.0, 3.0} {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 42, DrumName: "closed_hat",
+				StartBeat: base + beat, DurationBeat: 0.06, Velocity: 100,
+			})
+		}
+		// Ride cymbal swing pattern.
+		swing := []float64{0.0, 0.55, 1.0, 1.55, 2.0, 2.55, 3.0, 3.55}
+		for _, beat := range swing {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 51, DrumName: "ride",
+				StartBeat: base + beat, DurationBeat: 0.1, Velocity: 100,
+			})
+		}
+	}
+	fmt.Printf("[Drums-Jazz] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
+// drumsFunk: Syncopated funk drums. Tight snare, hi-hat 16ths, ghost notes.
+func drumsFunk(totalBars int, energy float64) []schema.NoteEvent {
+	var events []schema.NoteEvent
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+		// Kick on 1 (and sometimes 2&).
+		events = append(events, schema.NoteEvent{
+			Type: "note", Pitch: 36, DrumName: "kick",
+			StartBeat: base, DurationBeat: 0.08, Velocity: 100,
+		})
+		if bar%2 == 0 {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 36, DrumName: "kick",
+				StartBeat: base + 1.5, DurationBeat: 0.08, Velocity: 100,
+			})
+		}
+		// Tight snare on 2 and 4.
+		for _, beat := range []float64{1.0, 3.0} {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 38, DrumName: "snare",
+				StartBeat: base + beat, DurationBeat: 0.06, Velocity: 100,
+			})
+		}
+		// Hi-hat 16th notes.
+		for step := 0; step < 16; step++ {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 42, DrumName: "closed_hat",
+				StartBeat: base + float64(step)*0.25, DurationBeat: 0.03, Velocity: 100,
+			})
+		}
+		// Ghost notes on snare between backbeats.
+		for _, g := range []float64{1.25, 1.75, 3.25, 3.75} {
+			events = append(events, schema.NoteEvent{
+				Type: "note", Pitch: 38, DrumName: "snare",
+				StartBeat: base + g, DurationBeat: 0.03, Velocity: 100,
+			})
+		}
+	}
+	fmt.Printf("[Drums-Funk] %d events, %d bars\n", len(events), totalBars)
+	return events
+}
+
 // drumsCasual: Minimal drums for casual games. Soft kick on 1, rim-click on 3, nothing else.
 func drumsCasual(totalBars int, energy float64) []schema.NoteEvent {
 	var events []schema.NoteEvent

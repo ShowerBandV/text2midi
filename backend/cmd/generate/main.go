@@ -973,6 +973,10 @@ func styleProfile(style string) (darkness, energy, rhythmic, tension float64, de
 		return 0.75, 0.22, 0.35, 0.70, 80, 32, "tension" // ~1:36 at 80bpm
 	case strings.Contains(s, "victory") || strings.Contains(s, "fanfare") || strings.Contains(s, "triumph"):
 		return 0.08, 0.82, 0.60, 0.10, 130, 24, "victory" // ~0:44 at 130bpm
+	case strings.Contains(s, "jazz") || strings.Contains(s, "swing"):
+		return 0.30, 0.40, 0.60, 0.25, 120, 60, "jazz" // ~2:00 at 120bpm
+	case strings.Contains(s, "funk"):
+		return 0.20, 0.65, 0.80, 0.20, 100, 50, "funk" // ~2:00 at 100bpm
 	case strings.Contains(s, "emo") || strings.Contains(s, "sad") || strings.Contains(s, "melancholy"):
 		return 0.75, 0.32, 0.22, 0.52, 72, 36, "emo" // ~2:00 at 72bpm
 	case strings.Contains(s, "trap") || strings.Contains(s, "hip"):
@@ -1009,8 +1013,13 @@ func progForStyle(root, mode string, totalBars int, chordStyle string) []string 
 			base := []string{root + "m", intervalChord(root, 8), intervalChord(root, 10), root + "m"}
 			return repeatChords(base, totalBars)
 		case "tension":
-			// i - bII - i (phrygian ominous, dungeon dread).
 			base := []string{root + "m", intervalChord(root, 1), root + "m", root + "m"}
+			return repeatChords(base, totalBars)
+		case "jazz":
+			base := []string{intervalChord(root, 2) + "7", fifthOf(root) + "7", root + "maj7", root + "maj7"}
+			return repeatChords(base, totalBars)
+		case "funk":
+			base := []string{root + "7", intervalChord(root, 5) + "7", root + "7", root + "7"}
 			return repeatChords(base, totalBars)
 		case "metal":
 			// i - bVI - bVII - i (metal: dark, chromatic, not the pop minor loop).
@@ -1478,13 +1487,27 @@ func trackLayout(style string) trackLayoutConfig {
 			counterName: "Low Strings", counterProg: 42, // Cello
 		}
 	case "victory":
-		// Victory: full band, triumphant. Drums + bass + brass + strings.
 		return trackLayoutConfig{
 			drums: true, bass: true, rhythm: true, lead: true, counter: true,
 			bassProg: 34,
-			rhythmName: "Brass", rhythmProg: 62, rhythmVol: 100, // Brass Section
-			leadName: "Trumpet", leadProg: 57, // Trumpet
-			counterName: "Strings", counterProg: 49, // String Ensemble 2
+			rhythmName: "Brass", rhythmProg: 62, rhythmVol: 100,
+			leadName: "Trumpet", leadProg: 57,
+			counterName: "Strings", counterProg: 49,
+		}
+	case "jazz":
+		return trackLayoutConfig{
+			drums: true, bass: true, rhythm: true, lead: true, counter: false,
+			bassProg: 33, // Electric Bass (finger)
+			rhythmName: "Piano", rhythmProg: 1, rhythmVol: 80, // Acoustic Grand
+			leadName: "Sax", leadProg: 67, // Tenor Sax
+		}
+	case "funk":
+		return trackLayoutConfig{
+			drums: true, bass: true, rhythm: true, lead: true, counter: true,
+			bassProg: 37, // Slap Bass
+			rhythmName: "Guitar", rhythmProg: 28, rhythmVol: 90, // Muted Guitar
+			leadName: "Brass", leadProg: 62, // Brass Section
+			counterName: "Clav", counterProg: 8, // Clavinet
 		}
 	case "emo":
 		// Emo: drums + bass + dark pad + piano lead + strings counter.
