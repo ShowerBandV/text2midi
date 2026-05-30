@@ -755,15 +755,7 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 	var wg sync.WaitGroup
 	wg.Add(4)
 
-	// Pre-compute lead parameters.
-	stepProb := 0.55 + (1.0-tension)*0.3
-	velMin := 45 + int(darkness*20)
-	velMax := 75 + int(energy*40)
-	if velMax > 115 {
-		velMax = 115
-	}
-	secDensity := buildSectionDensity(bars, energy)
-	secRegister := buildSectionRegister(bars, energy)
+	// Pre-compute lead parameters (used by GenerateLeadMidra fallback only).
 	blockRatio := 0.3 + energy*0.4
 
 	// Override key mode if --mode is set.
@@ -806,9 +798,9 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 		case chordStyle == "metal":
 			l = composer.GenerateLeadMetal(keyRoot, bars, energy)
 		case chordStyle == "rock":
-			l = composer.GenerateLeadRock(keyRoot, bars, energy)
+			l = composer.GenerateLeadSectioned(composer.GetScaleDegrees(keyRoot, leadKeyMode), bars, energy)
 		case chordStyle == "punk":
-			l = composer.GenerateLeadPunk(keyRoot, bars, energy)
+			l = composer.GenerateLeadSectioned(composer.GetScaleDegrees(keyRoot, "minor"), bars, energy)
 		case chordStyle == "pop" || chordStyle == "rpg" || chordStyle == "healing" || chordStyle == "victory":
 			if chaos > 0.03 {
 				// With chaos, motif-based melody shines.
@@ -818,7 +810,8 @@ func runLocal(prompt, styleName string, bpm, bars int, key, out string, dryRun b
 				l = composer.GeneratePianoLegend(keyRoot, leadKeyMode, bars, chords)
 			}
 		default:
-			l = composer.GenerateLeadMidra(keyRoot, leadKeyMode, bars, stepProb, velMin, velMax, secDensity, secRegister, pentatonic)
+			// emo, trap, ambient, etc. — use sectioned lead with their scale.
+			l = composer.GenerateLeadSectioned(composer.GetScaleDegrees(keyRoot, leadKeyMode), bars, energy)
 		}
 		evMu.Lock()
 		evMap["lead"] = l

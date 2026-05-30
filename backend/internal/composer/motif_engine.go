@@ -766,6 +766,65 @@ func GenerateLeadRock(keyRoot string, totalBars int, energy float64) []schema.No
 	return events
 }
 
+// GenerateLeadSectioned creates a lead that varies by song section.
+// Intro=hook, Verse=sparse, Chorus=full, Bridge=solo/rest, Outro=hook recap.
+func GenerateLeadSectioned(scale []int, totalBars int, _ float64) []schema.NoteEvent {
+	rng := rand.New(rand.NewSource(globalSeed))
+	var events []schema.NoteEvent
+	hook := buildHook(scale, rng)
+
+	for bar := 0; bar < totalBars; bar++ {
+		base := float64(bar) * 4.0
+		sec := songSection(bar, totalBars)
+
+		switch sec {
+		case "intro":
+			// Hook statement — play the motif with breathing.
+			if bar%2 == 0 {
+				for i, p := range hook {
+					events = append(events, schema.NoteEvent{
+						Type: "note", Pitch: p + 12*4,
+						StartBeat: base + float64(i)*0.5, DurationBeat: 0.2, Velocity: 100,
+					})
+				}
+			}
+		case "verse":
+			// Sparse — only every 4th bar, single notes.
+			if bar%4 == 0 {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: hook[0] + 12*4,
+					StartBeat: base + 1.0, DurationBeat: 1.5, Velocity: 100,
+				})
+			}
+		case "chorus", "chorus2":
+			// Full — hook with double-stops.
+			for i, p := range hook {
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p + 12*5,
+					StartBeat: base + float64(i)*0.4, DurationBeat: 0.15, Velocity: 100,
+				})
+				events = append(events, schema.NoteEvent{
+					Type: "note", Pitch: p + 12*5 + 5,
+					StartBeat: base + float64(i)*0.4, DurationBeat: 0.15, Velocity: 100,
+				})
+			}
+		case "bridge":
+			// Rest — let other instruments shine.
+		case "outro":
+			// Hook recap — same as intro but softer.
+			if bar%2 == 0 {
+				for i, p := range hook {
+					events = append(events, schema.NoteEvent{
+						Type: "note", Pitch: p + 12*4,
+						StartBeat: base + float64(i)*0.5, DurationBeat: 0.25, Velocity: 100,
+					})
+				}
+			}
+		}
+	}
+	return events
+}
+
 // GenerateLeadPunk creates punk lead: short 3-4 note licks, octave unison, mostly rests.
 func GenerateLeadPunk(keyRoot string, totalBars int, energy float64) []schema.NoteEvent {
 	scale := getScaleDegrees(keyRoot, "minor")
