@@ -311,9 +311,13 @@ func main() {
 			fmt.Sscanf(v, "%d", &maxRounds)
 		}
 		for round := 0; round < maxRounds; round++ {
+			// Snapshot before iteration — can rollback if review fails.
+			snapshot := snapshotEvMap(evMap)
+
 			report, err := agent.ReviewWithLLM(client, evMap, plan)
 			if err != nil {
-				fmt.Printf("  [Reviewer] LLM review failed: %v — stopping iteration\n", err)
+				fmt.Printf("  [Reviewer] LLM review failed: %v — rolling back\n", err)
+				evMap = snapshot
 				break
 			}
 			fmt.Printf("  [Reviewer] round %d: total=%.1f melody=%.1f harm=%.1f rhythm=%.1f\n",
@@ -1330,6 +1334,17 @@ func makeLoopable(evMap map[string][]schema.NoteEvent, totalBars int) {
 		evMap[key] = filtered
 	}
 	fmt.Println("  [Loopable] last bar mirrors first bar for seamless loop")
+}
+
+// snapshotEvMap creates a deep copy of the events map for rollback.
+func snapshotEvMap(evMap map[string][]schema.NoteEvent) map[string][]schema.NoteEvent {
+	snap := make(map[string][]schema.NoteEvent, len(evMap))
+	for k, evs := range evMap {
+		clone := make([]schema.NoteEvent, len(evs))
+		copy(clone, evs)
+		snap[k] = clone
+	}
+	return snap
 }
 
 func flattenVelocities(evMap map[string][]schema.NoteEvent, vel int) {
