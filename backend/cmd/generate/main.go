@@ -1007,8 +1007,8 @@ func styleProfile(style string) (darkness, energy, rhythmic, tension float64, de
 		return 0.35, 0.78, 0.50, 0.35, 170, 85, "punk" // ~2:00 at 170bpm
 	case strings.Contains(s, "ambient") || strings.Contains(s, "atmo"):
 		return 0.30, 0.18, 0.10, 0.15, 60, 30, "ambient" // ~2:00 at 60bpm
-	default: // rpg / casual / game
-		return 0.20, 0.45, 0.30, 0.15, 100, 48, "rpg" // ~1:55 at 100bpm
+	default: // rpg / casual / game — distinct from pop: sparser, more ambient, lower energy
+		return 0.15, 0.30, 0.15, 0.10, 90, 48, "rpg" // ~2:08 at 90bpm
 	}
 }
 
@@ -1200,7 +1200,7 @@ func buildSectionRegister(totalBars int, energy float64) []int {
 // determineDrumStyle checks the parsed intent for style keywords that map to drum styles.
 // Returns "" if no match — caller falls back to LLM drum generation.
 func determineDrumStyle(intentMap map[string]any) string {
-	// Check style list first.
+	// Trust the LLM's choice. Only override for specific styles.
 	hasOrchestral := false
 	if styles, ok := intentMap["style"]; ok {
 		if sl, ok := styles.([]any); ok {
@@ -1227,19 +1227,14 @@ func determineDrumStyle(intentMap map[string]any) string {
 		}
 	}
 	if hasOrchestral {
-		return "" // let LLM handle orchestral arrangement
+		return ""
 	}
-	// Check mood — only apply if no orchestral override.
+	// Mood-based overrides: only for sadness (emo). Aggression doesn't mean metal.
 	if moods, ok := intentMap["mood"]; ok {
 		if ml, ok := moods.([]any); ok {
 			for _, m := range ml {
 				if str, ok := m.(string); ok {
 					low := strings.ToLower(str)
-					if strings.Contains(low, "aggressive") || strings.Contains(low, "angry") {
-						if !hasOrchestral {
-							return "metal"
-						}
-					}
 					if strings.Contains(low, "sad") || strings.Contains(low, "melancholic") {
 						return "emo"
 					}
